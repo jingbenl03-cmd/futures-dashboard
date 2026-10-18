@@ -1,0 +1,1174 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="color-scheme" content="light dark" />
+<link rel="icon" href="data:," />
+<title>期货情报看板</title>
+<style>
+  :root{
+    color-scheme: light dark;
+    --bg:#F8FAFD; --card:#FFFFFF; --card2:#F1F4F9;
+    --ink:#1F1F1F; --muted:#5F6368; --faint:#80868B;
+    --line:#E2E8F0; --line2:#CBD5E1;
+    --primary:#1A73E8; --primary-ink:#1A73E8; --hl:#E8F0FE;
+    --up:#D93025; --up-bg:#FCE8E6;
+    --down:#188038; --down-bg:#E6F4EA;
+    --amber:#B06000; --amber-bg:#FEF7E0;
+    --purple:#7627BB; --purple-bg:#F3E8FD;
+    --scrim:rgba(0,0,0,.24);
+    --shadow:0 1px 2px rgba(60,64,67,.08),0 1px 3px rgba(60,64,67,.06);
+    --shadow-h:0 2px 6px rgba(60,64,67,.14),0 4px 14px rgba(60,64,67,.10);
+    --ease:cubic-bezier(0.05,0.7,0.1,1.0);
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#101418; --card:#181D23; --card2:#1F262E;
+      --ink:#E8EAED; --muted:#9AA0A6; --faint:#767D85;
+      --line:#2A323B; --line2:#3A444F;
+      --primary:#8AB4F8; --primary-ink:#8AB4F8; --hl:#22334D;
+      --up:#F28B82; --up-bg:#3B2320;
+      --down:#81C995; --down-bg:#1E3327;
+      --amber:#F2B04A; --amber-bg:#3A2E13;
+      --purple:#D7AEFB; --purple-bg:#32224A;
+      --scrim:rgba(0,0,0,.5);
+      --shadow:0 1px 2px rgba(0,0,0,.4),0 1px 3px rgba(0,0,0,.3);
+      --shadow-h:0 2px 6px rgba(0,0,0,.5),0 4px 14px rgba(0,0,0,.4);
+    }
+  }
+  html{-webkit-text-size-adjust:100%}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:"PingFang SC","Microsoft YaHei",-apple-system,"Hiragino Sans GB","Noto Sans SC",sans-serif;
+    font-size:15px; line-height:1.55; font-variant-numeric:tabular-nums;
+  }
+  .num{font-variant-numeric:tabular-nums}
+  button{font-family:inherit}
+  .wrap{max-width:1280px; margin:0 auto; padding:0 16px 56px}
+
+  /* ---------- Tier 0: sticky top bar ---------- */
+  .topbar{
+    position:sticky; top:0; z-index:60; min-height:64px;
+    background:var(--card); border-bottom:1px solid var(--line);
+    display:flex; align-items:center; gap:14px; flex-wrap:wrap;
+    padding:8px 16px;
+  }
+  .topbar .ttl{font-size:19px; font-weight:700; white-space:nowrap; letter-spacing:.01em}
+  .topbar .upd{font-size:12px; color:var(--muted); white-space:nowrap}
+  .searchbox{
+    display:flex; align-items:center; gap:6px; background:var(--card2);
+    border:1px solid transparent; border-radius:999px; padding:6px 12px; flex:0 1 260px; min-width:150px;
+  }
+  .searchbox:focus-within{background:var(--card); border-color:var(--primary); box-shadow:var(--shadow)}
+  .searchbox svg{flex:none; fill:var(--muted)}
+  .searchbox input{border:none; outline:none; background:transparent; font:inherit; font-size:13.5px; color:var(--ink); width:100%}
+  .searchbox input::placeholder{color:var(--faint)}
+  .pills{display:flex; gap:8px; flex-wrap:wrap; margin-left:auto}
+  .pill{
+    border:1px solid var(--line); background:var(--card); color:var(--ink);
+    border-radius:999px; padding:5px 12px; font-size:13px; cursor:pointer;
+    display:inline-flex; align-items:center; gap:6px; transition:box-shadow .14s,background .14s;
+  }
+  .pill:hover{box-shadow:var(--shadow-h)}
+  .pill b{font-size:14px}
+  .pill.on{background:var(--hl); border-color:var(--primary); color:var(--primary-ink)}
+  .pill.warn{border-color:var(--amber); color:var(--amber); background:var(--amber-bg); font-weight:700}
+  .pill.purp{border-color:var(--purple); color:var(--purple); background:var(--purple-bg); font-weight:700}
+  .pill:focus-visible,.chip:focus-visible,.tabbtn:focus-visible{outline:2px solid var(--primary); outline-offset:2px}
+
+  /* focus banner */
+  .focusbar{
+    position:sticky; top:65px; z-index:55; display:none;
+    background:var(--hl); color:var(--ink); border-bottom:1px solid var(--line);
+    padding:8px 16px; font-size:13.5px; align-items:center; gap:10px;
+  }
+  .focusbar.show{display:flex}
+  .focusbar b{color:var(--primary-ink)}
+  .focusbar button{margin-left:auto; border:none; background:transparent; font-size:18px; line-height:1; cursor:pointer; color:var(--muted); padding:2px 6px}
+
+  /* ---------- generic cards / sections ---------- */
+  section{margin-top:26px}
+  .sec-head{display:flex; align-items:baseline; gap:12px; margin-bottom:12px; flex-wrap:wrap}
+  .sec-head h2{font-size:19px; font-weight:700; margin:0}
+  .sec-head .hint{color:var(--muted); font-size:13px}
+  .card{background:var(--card); border:1px solid var(--line); border-radius:12px; box-shadow:var(--shadow)}
+  .bigcard{border-radius:16px}
+
+  /* ---------- Tier 1 ---------- */
+  .tier1{display:grid; grid-template-columns:1.9fr 1fr; gap:16px}
+  @media (max-width:960px){ .tier1{grid-template-columns:1fr} }
+  .tier1-side{display:flex; flex-direction:column; gap:16px}
+  .alert-card{padding:20px; border-color:#F3C6A5}
+  @media (prefers-color-scheme: dark){ .alert-card{border-color:#5A3A22} }
+  .alert-grid{display:grid; grid-template-columns:264px 1fr; gap:22px}
+  @media (max-width:700px){ .alert-grid{grid-template-columns:1fr} }
+  .alert-tag{display:inline-block; background:var(--amber); color:#fff; font-size:12px; font-weight:700; padding:2px 10px; border-radius:999px; letter-spacing:.05em}
+  @media (prefers-color-scheme: dark){ .alert-tag{color:#241703} }
+  .alert-pair{font-size:25px; font-weight:700; margin:10px 0 2px}
+  .alert-pair .code{font-size:13px; color:var(--muted); font-weight:400}
+  .zbig{font-size:46px; font-weight:700; line-height:1.05; color:var(--amber); margin:10px 0 2px}
+  .zbig small{font-size:14px; color:var(--muted); font-weight:400; display:block; margin-top:4px}
+  .kv{display:flex; justify-content:space-between; gap:10px; padding:6px 0; border-top:1px dashed var(--line2); font-size:13.5px}
+  .kv:first-of-type{border-top:none}
+  .kv .k{color:var(--muted)} .kv .v{font-weight:700; text-align:right}
+  .chart-title{font-size:13px; color:var(--muted); margin-bottom:6px; display:flex; justify-content:space-between; flex-wrap:wrap; gap:6px}
+  .alert-note{margin-top:12px; font-size:13.5px; color:var(--muted); border-top:1px solid var(--line); padding-top:12px}
+  .alert-note b{color:var(--ink)}
+  .linkbtn{border:none; background:transparent; color:var(--primary-ink); font-size:13.5px; font-weight:700; cursor:pointer; padding:0}
+  .linkbtn:hover{text-decoration:underline}
+
+  .mini-card{padding:16px 18px}
+  .mini-card h3{margin:0 0 8px; font-size:15.5px; font-weight:700; display:flex; align-items:center; gap:8px; flex-wrap:wrap}
+  .pass{display:inline-block; background:var(--down-bg); color:var(--down); font-weight:700; font-size:11.5px; padding:2px 9px; border-radius:999px}
+  .nogo{display:inline-block; background:var(--purple-bg); color:var(--purple); font-weight:700; font-size:11.5px; padding:2px 9px; border-radius:999px}
+  .bigmetric{display:flex; gap:20px; flex-wrap:wrap; margin:8px 0 4px}
+  .bigmetric .m .v{font-size:27px; font-weight:700; line-height:1.1}
+  .bigmetric .m .l{font-size:12px; color:var(--muted)}
+  .mini-card p{margin:8px 0 0; font-size:13.5px; color:var(--muted)}
+  .fal-item{padding:9px 0; border-top:1px dashed var(--line2); font-size:13.5px}
+  .fal-item:first-of-type{border-top:none; padding-top:2px}
+  .fal-item b{color:var(--purple)}
+  .flash{animation:flash 1.2s ease}
+  @keyframes flash{0%{box-shadow:0 0 0 3px var(--purple)}100%{box-shadow:var(--shadow)}}
+
+  /* ---------- Tier 2 workbench ---------- */
+  .workbench{display:grid; grid-template-columns:1.12fr .88fr; gap:16px; align-items:start}
+  @media (max-width:960px){ .workbench{grid-template-columns:1fr} }
+  .chips{display:flex; flex-wrap:wrap; gap:8px; margin-bottom:12px; align-items:center}
+  .chip{border:1px solid var(--line2); background:var(--card); color:var(--ink); padding:5px 13px; font-size:13px; cursor:pointer; border-radius:999px; transition:background .14s}
+  .chip[aria-pressed="true"]{background:var(--primary); color:#fff; border-color:var(--primary); font-weight:700}
+  @media (prefers-color-scheme: dark){ .chip[aria-pressed="true"]{color:#0B1B33} }
+  .sortsel{margin-left:auto; font-size:13px; color:var(--muted)}
+  .sortsel select{font:inherit; color:var(--ink); background:var(--card); border:1px solid var(--line2); padding:4px 6px; border-radius:8px}
+  @media (max-width:767px){
+    .topbar{gap:8px; padding:8px 12px}
+    .topbar .ttl{font-size:17px}
+    .topbar .upd{order:3; width:100%; font-size:11.5px}
+    .searchbox{flex:1 1 140px}
+    .pills{order:4; flex-wrap:nowrap; overflow-x:auto; max-width:100%; scrollbar-width:none; margin-left:0}
+    .pills::-webkit-scrollbar{display:none}
+    .pill{flex:none}
+    .focusbar{top:118px}
+    .chips{position:sticky; top:118px; z-index:40; background:var(--bg); padding:8px 0; flex-wrap:nowrap; overflow-x:auto; scrollbar-width:none}
+    .chips::-webkit-scrollbar{display:none}
+    .chip{flex:none}
+  }
+  .qgrid{display:grid; grid-template-columns:repeat(auto-fill,minmax(205px,1fr)); gap:10px}
+  .qcard{background:var(--card); border:1px solid var(--line); border-radius:12px; box-shadow:var(--shadow); padding:12px 14px 10px; cursor:pointer; transition:box-shadow .14s,border-color .14s; text-align:left; width:100%; color:var(--ink)}
+  .qcard:hover{box-shadow:var(--shadow-h); border-color:var(--line2)}
+  .qcard .row1{display:flex; justify-content:space-between; align-items:baseline; gap:8px}
+  .qname{font-weight:700; font-size:16px}
+  .qcode{color:var(--faint); font-size:11.5px}
+  .qsec{font-size:11px; color:var(--muted); border:1px solid var(--line2); padding:0 7px; border-radius:999px; white-space:nowrap}
+  .qclose{font-size:20px; font-weight:700}
+  .qchg{font-weight:700; font-size:13px; padding:2px 8px; border-radius:999px}
+  .qchg.up{color:var(--up); background:var(--up-bg)}
+  .qchg.down{color:var(--down); background:var(--down-bg)}
+  .up-t{color:var(--up)} .down-t{color:var(--down)}
+  .qspark{margin-top:6px; display:block; width:100%; height:38px}
+  .qfoot{display:flex; justify-content:space-between; align-items:center; font-size:11.5px; color:var(--faint); margin-top:4px; gap:6px; flex-wrap:wrap}
+  .qfoot>span{white-space:nowrap}
+  .relbadge{
+    border:1px solid var(--line); background:var(--card2); color:var(--muted);
+    border-radius:999px; padding:2px 9px; font-size:11.5px; cursor:pointer; white-space:nowrap;
+  }
+  .relbadge:hover{border-color:var(--primary); color:var(--primary-ink)}
+  .relbadge.hasalert{border-color:var(--amber); color:var(--amber); background:var(--amber-bg); font-weight:700}
+  .relbadge.none{border:none; background:transparent; cursor:default; padding-left:0}
+  .qempty{grid-column:1/-1; color:var(--muted); font-size:14px; padding:18px 4px}
+  @media (max-width:767px){
+    .qgrid{grid-template-columns:1fr; gap:6px}
+    .qcard{display:grid; grid-template-columns:1fr auto auto; grid-template-rows:28px 28px; align-items:center; height:56px; padding:0 12px; column-gap:10px}
+    .qcard .row1{display:contents}
+    .qcard .qnm{grid-row:1; grid-column:1}
+    .qcard .qsec{display:none}
+    .qcard .qmeta{grid-row:2; grid-column:1; font-size:11px; color:var(--faint)}
+    .qcard .qspark{grid-row:1/3; grid-column:2; width:72px; height:28px; margin:0}
+    .qcard .qpr{grid-row:1/3; grid-column:3; text-align:right}
+    .qcard .qclose{font-size:16px; display:block; line-height:1.2}
+    .qcard .qchg{font-size:11.5px; padding:1px 6px}
+    .qcard .qfoot{display:none}
+  }
+  @media (min-width:768px){ .qcard .qmeta{display:none} }
+
+  /* tabs panel */
+  .tabs-panel{position:sticky; top:80px; max-height:calc(100dvh - 96px); display:flex; flex-direction:column; overflow:hidden}
+  @media (max-width:960px){ .tabs-panel{position:static; max-height:none} }
+  .tabbar{display:flex; gap:2px; border-bottom:1px solid var(--line); padding:6px 8px 0; flex-wrap:wrap}
+  .tabbtn{border:none; background:transparent; color:var(--muted); font-size:14px; font-weight:500; padding:8px 12px; cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-1px}
+  .tabbtn[aria-selected="true"]{color:var(--primary-ink); border-bottom-color:var(--primary); font-weight:700}
+  .tabpage{overflow-y:auto; padding:6px 0}
+  .tabpage th:first-child,.tabpage td:first-child{position:sticky; left:0; background:var(--card); z-index:1}
+  .tabpage tr.is-alert td:first-child{background:var(--amber-bg)}
+  table{border-collapse:collapse; width:100%; font-size:13.5px}
+  th{text-align:left; font-size:12px; color:var(--muted); font-weight:700; padding:9px 12px; border-bottom:1px solid var(--line2); white-space:nowrap; background:var(--card)}
+  td{padding:8px 12px; border-bottom:1px solid var(--line); vertical-align:middle}
+  tbody tr{cursor:pointer; transition:opacity .14s, background .14s}
+  tbody tr:hover td{background:var(--card2)}
+  tr.hl td{background:var(--hl) !important}
+  tbody.dim tr:not(.hl){opacity:.35}
+  td.r, th.r{text-align:right}
+  .pairname{font-weight:700; white-space:nowrap}
+  .paircode{color:var(--faint); font-size:11px; font-weight:400; white-space:nowrap}
+  tr.is-alert td{background:var(--amber-bg)}
+  .alertbadge{background:var(--amber); color:#fff; font-size:11px; font-weight:700; padding:1px 7px; border-radius:999px; margin-left:6px; white-space:nowrap}
+  @media (prefers-color-scheme: dark){ .alertbadge{color:#241703} }
+  .devbar{position:relative; height:10px; background:var(--card2); border-radius:5px; min-width:96px; overflow:hidden}
+  .devbar .zero{position:absolute; left:50%; top:0; bottom:0; width:1px; background:var(--line2)}
+  .devbar .fill{position:absolute; top:2px; height:6px; border-radius:3px}
+  .devwrap{display:flex; align-items:center; gap:8px}
+  .devwrap .num{width:50px; text-align:right; font-size:12.5px}
+  .signrate{color:var(--muted); font-size:12.5px}
+  .rowhidden{display:none !important}
+  @media (max-width:767px){
+    .hideS{display:none !important}
+    th,td{padding:7px 9px; font-size:12.5px}
+    .devbar{min-width:48px}
+    .paircode{display:none}
+  }
+
+  /* tails */
+  .tailrow{display:grid; grid-template-columns:132px 1fr 108px; gap:12px; align-items:center; padding:10px 14px; border-bottom:1px solid var(--line); cursor:pointer; transition:opacity .14s,background .14s}
+  .tailrow:last-child{border-bottom:none}
+  .tailrow:hover{background:var(--card2)}
+  .tailrow.hl{background:var(--hl)}
+  .tailsbox.dim .tailrow:not(.hl){opacity:.35}
+  .tailbar{height:12px; background:var(--card2); position:relative; border-radius:6px; overflow:hidden}
+  .tailbar .fill{position:absolute; left:0; top:0; bottom:0; background:var(--amber); border-radius:6px}
+  .tailmeta{font-size:12px; color:var(--muted); text-align:right}
+  .tailmeta b{color:var(--ink); font-size:14px}
+  @media (max-width:767px){ .tailrow{grid-template-columns:96px 1fr 84px; gap:8px; padding:9px 10px} }
+
+  /* notes */
+  .note-list{list-style:none; margin:0; padding:6px 16px 12px}
+  .note-list li{padding:9px 0; border-top:1px dashed var(--line2); font-size:13.5px}
+  .note-list li:first-child{border-top:none}
+  .note-list .tag{font-size:11px; font-weight:700; color:var(--primary-ink); background:var(--hl); padding:1px 7px; border-radius:999px; margin-right:8px; white-space:nowrap}
+  .note-list .tag.purp{color:var(--purple); background:var(--purple-bg)}
+
+  footer{margin-top:40px; border-top:1px solid var(--line2); padding-top:14px; color:var(--muted); font-size:12.5px; line-height:1.7}
+
+  /* ---------- Tier 3: drawer ---------- */
+  .scrim{position:fixed; inset:0; background:var(--scrim); opacity:0; pointer-events:none; transition:opacity 200ms; z-index:80}
+  .scrim.show{opacity:1; pointer-events:auto}
+  .sheet{
+    position:fixed; top:0; right:0; bottom:0; width:520px; max-width:94vw; z-index:90;
+    background:var(--card); box-shadow:-8px 0 32px rgba(0,0,0,.18);
+    transform:translateX(105%); transition:transform 200ms ease;
+    display:flex; flex-direction:column; overflow:hidden;
+  }
+  .sheet.open{transform:translateX(0); transition:transform 280ms var(--ease)}
+  .sheet-head{padding:14px 20px 10px; border-bottom:1px solid var(--line); display:flex; align-items:flex-start; gap:10px}
+  .sheet-body{overflow-y:auto; padding:16px 20px 32px; flex:1}
+  .sheet-close{margin-left:auto; border:none; background:var(--card2); width:32px; height:32px; border-radius:50%; font-size:16px; cursor:pointer; color:var(--muted); flex:none}
+  .sheet-back{border:none; background:transparent; color:var(--primary-ink); font-size:13.5px; font-weight:700; cursor:pointer; padding:4px 0}
+  .dragbar{display:none}
+  @media (max-width:767px){
+    .sheet{top:auto; left:0; right:0; bottom:0; width:auto; max-width:none; height:86dvh; border-radius:16px 16px 0 0; transform:translateY(105%)}
+    .sheet.open{transform:translateY(0)}
+    .dragbar{display:block; width:36px; height:4px; border-radius:2px; background:var(--line2); margin:8px auto 0; flex:none; touch-action:none}
+  }
+  .snap-head{display:flex; align-items:flex-start; gap:10px; flex-wrap:wrap}
+  .snap-name{font-size:24px; font-weight:700; line-height:1.2}
+  .snap-code{color:var(--faint); font-size:13px}
+  .secpill{font-size:11.5px; color:var(--primary-ink); background:var(--hl); padding:2px 9px; border-radius:999px; font-weight:700}
+  .snap-price{font-size:30px; font-weight:700; line-height:1.15}
+  .statgrid{display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin:14px 0}
+  .statgrid .sg{background:var(--card2); border-radius:12px; padding:10px 12px}
+  .statgrid .sg .v{font-size:16.5px; font-weight:700}
+  .statgrid .sg .l{font-size:11.5px; color:var(--muted)}
+  .pctbar{position:relative; height:8px; background:var(--card2); border-radius:4px; margin:8px 0 4px}
+  .pctbar .dot{position:absolute; top:50%; width:14px; height:14px; border-radius:50%; background:var(--primary); border:2.5px solid var(--card); transform:translate(-50%,-50%); box-shadow:var(--shadow)}
+  .pctlabels{display:flex; justify-content:space-between; font-size:11.5px; color:var(--muted)}
+  .chartbox{position:relative; margin:6px 0 2px}
+  .charttip{
+    position:absolute; pointer-events:none; background:var(--ink); color:var(--bg);
+    font-size:12px; border-radius:8px; padding:5px 9px; opacity:0; transition:opacity .1s; white-space:nowrap; z-index:5;
+  }
+  .legend{display:flex; gap:14px; font-size:12px; color:var(--muted); flex-wrap:wrap; margin-top:2px}
+  .legend .sw{display:inline-block; width:14px; height:3px; border-radius:2px; vertical-align:middle; margin-right:5px}
+  .condbanner{
+    background:var(--amber-bg); border:1px solid var(--amber); border-radius:12px;
+    padding:12px 14px; font-size:13.5px; margin:14px 0; display:flex; gap:10px; align-items:center; flex-wrap:wrap;
+  }
+  .condbanner b{color:var(--amber)}
+  .sheet h4{font-size:15px; font-weight:700; margin:20px 0 8px}
+  .relrow{
+    display:flex; align-items:center; gap:10px; width:100%; text-align:left;
+    background:var(--card); border:1px solid var(--line); border-radius:12px;
+    padding:10px 12px; margin-bottom:8px; cursor:pointer; color:var(--ink); transition:box-shadow .14s;
+  }
+  .relrow:hover{box-shadow:var(--shadow-h)}
+  .relrow .rn{font-weight:700; font-size:14.5px}
+  .relrow .rm{margin-left:auto; text-align:right; font-size:12px; color:var(--muted)}
+  .relrow .rm b{color:var(--ink); font-size:13px}
+  .tytag{font-size:11px; font-weight:700; padding:1px 7px; border-radius:999px; white-space:nowrap}
+  .ty-corr{background:var(--hl); color:var(--primary-ink)}
+  .ty-coint{background:var(--down-bg); color:var(--down)}
+  .ty-tail{background:var(--amber-bg); color:var(--amber)}
+  .ty-alert{background:var(--amber); color:#fff}
+  @media (prefers-color-scheme: dark){ .ty-alert{color:#241703} }
+  .pillrow{display:flex; gap:8px; flex-wrap:wrap; margin:10px 0 2px}
+  .statpill{border:1px solid var(--line2); border-radius:999px; padding:4px 11px; font-size:12.5px; color:var(--muted)}
+  .statpill b{color:var(--ink); font-size:13.5px}
+  .statpill.hot{border-color:var(--amber); background:var(--amber-bg); color:var(--amber); font-weight:700}
+  .statpill.hot b{color:var(--amber)}
+  .diag2{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:6px}
+  @media (max-width:480px){ .diag2{grid-template-columns:1fr} }
+  .diag{background:var(--card2); border-radius:12px; padding:12px 14px}
+  .diag .dt{font-size:12px; color:var(--muted); font-weight:700; margin-bottom:6px}
+  .diag .dv{font-size:14px; line-height:1.6}
+  .diag .dv b{font-size:16px}
+  .diag .none{color:var(--faint); font-size:13px}
+  .mirror{display:grid; grid-template-columns:1fr 1fr; gap:10px}
+  @media (max-width:480px){ .mirror{grid-template-columns:1fr} }
+  .mirror .leg{border:1px solid var(--line); border-radius:12px; padding:12px 14px}
+  .mirror .leg .ln{font-weight:700; font-size:15.5px}
+  svg text{font-family:inherit}
+</style>
+</head>
+<body>
+
+<!-- Tier 0 -->
+<header class="topbar">
+  <span class="ttl">期货情报看板</span>
+  <span class="upd">数据截至 <b id="asof"></b> 收盘 · 更新 <span id="gen"></span></span>
+  <label class="searchbox">
+    <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M15.5 14h-.79l-.28-.27a6.5 6.5 0 1 0-.7.7l.27.28v.79l5 4.99L20.49 19zm-6 0A4.5 4.5 0 1 1 14 9.5 4.5 4.5 0 0 1 9.5 14z"/></svg>
+    <input id="search" type="search" placeholder="搜索品种名 / 代码，如 沪铜 / CU0" autocomplete="off" />
+  </label>
+  <nav class="pills" id="pills" aria-label="计数过滤"></nav>
+</header>
+<div class="focusbar" id="focusbar"><span id="focus-text"></span><button id="focus-clear" aria-label="解除聚焦">×</button></div>
+
+<div class="wrap">
+
+  <!-- Tier 1 -->
+  <section aria-label="异动区">
+    <div class="tier1">
+      <div class="card bigcard alert-card">
+        <div class="alert-grid">
+          <div>
+            <span class="alert-tag">解耦告警 · ALERT</span>
+            <div class="alert-pair"><span id="al-names"></span> <span class="code num" id="al-codes"></span></div>
+            <div class="zbig"><span class="num" id="al-z"></span><small>价差 Z 分数（告警阈值 ±2）</small></div>
+            <div id="al-kv" style="margin-top:12px"></div>
+            <p style="margin:12px 0 0"><button class="linkbtn" id="al-open">查看配对诊断 →</button></p>
+          </div>
+          <div>
+            <div class="chart-title"><span id="al-chart-title"></span><span class="num" id="al-range"></span></div>
+            <div id="al-chart"></div>
+            <div class="alert-note">
+              <b>为什么值得看：</b>这对组合通过了协整检验（半衰期仅 5.7 天，是 11 对达标组合里回归最快的之一），
+              且 PELT 变点检测检出 13 个结构断点、最近一个在 2026 年 3 月，与本次脱钩互相印证。
+              同时 EWMA 动态相关已从 60 日均值滑落——价差拉开的同时相关性也在走弱，
+              后续是回归还是结构性脱钩，需要盯紧。触发后 20 日回归胜率尚待未来数据验证。
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="tier1-side">
+        <div class="card mini-card">
+          <h3>Walk-Forward 滚动验证 <span class="pass">双 Go · PASS</span></h3>
+          <div class="bigmetric">
+            <div class="m"><div class="v num">93.9%</div><div class="l">符号维持率（门槛 ≥85%）</div></div>
+            <div class="m"><div class="v num">12.4%</div><div class="l">均值衰减率（门槛 ≤25%）</div></div>
+            <div class="m"><div class="v num">3,828</div><div class="l">发现→验证记录 · 80 个滚动点</div></div>
+          </div>
+          <p>2020–2026 样本外验证：工业金属对最稳，铜-锌、镍-不锈钢等符号维持率达 100%。协整检验 157 对白名单中 11 对达标，超额完成 5–8 对目标。</p>
+        </div>
+        <div class="card mini-card" id="fal-card">
+          <h3>证伪信号 <span class="nogo">NO-GO · 已停止</span></h3>
+          <div class="fal-item"><b>生猪 Lag5 滞后信号</b>：原始相关 r=0.697 看似很强，预白化后掉到 0.206 且不显著（p=0.11）——趋势重合的假象，已停止挖掘，转向养殖利润基本面监控。</div>
+          <div class="fal-item"><b>LightGBM T+5 方向预测</b>：Sharpe 未过 0.8 门槛，特征无信号是主因，模型路线暂时搁置。</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Tier 2 -->
+  <section aria-label="工作台">
+    <div class="sec-head"><h2>行情与配对工作台</h2><span class="hint">点品种卡看 120 日大图与关联配对 · 点配对行看双图联动诊断 · 悬停品种卡可联动高亮右侧表格</span></div>
+    <div class="workbench">
+      <div>
+        <div class="chips" id="sector-chips"></div>
+        <div class="qgrid" id="qgrid"></div>
+      </div>
+      <div class="card tabs-panel">
+        <div class="tabbar" role="tablist" id="tabbar"></div>
+        <div class="tabpage" id="tab-coint" role="tabpanel">
+          <table>
+            <thead><tr><th>协整配对</th><th class="r">β</th><th class="r">半衰期</th><th class="r hideS">ADF p</th><th class="r">当前 Z</th></tr></thead>
+            <tbody id="coint-body"></tbody>
+          </table>
+        </div>
+        <div class="tabpage" id="tab-base" role="tabpanel" hidden>
+          <table>
+            <thead><tr><th>结构相关基线</th><th class="r">长期 r</th><th class="r hideS">符号维持</th><th class="devcol">EWMA 偏离</th></tr></thead>
+            <tbody id="baseline-body"></tbody>
+          </table>
+        </div>
+        <div class="tabpage" id="tab-tail" role="tabpanel" hidden>
+          <div class="tailsbox" id="tail-list"></div>
+          <p style="padding:10px 14px 4px; margin:0; font-size:12.5px; color:var(--muted)">尾部相依：极端行情下联合大跌的概率。竖线为独立假设基准（1 倍）。</p>
+        </div>
+        <div class="tabpage" id="tab-notes" role="tabpanel" hidden>
+          <ul class="note-list" id="notes-list"></ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    数据来源：新浪期货主力连续日线（经 akshare 拉取，本地历史库 27 品种全历史）、USDA WASDE、国家统计局、农业农村部、世界黄金协会。价格为 2026-10-16 收盘快照，本页为静态快照，不含实时行情。相关性、协整与尾部相依均为历史统计结果，不构成投资建议。
+  </footer>
+</div>
+
+<!-- Tier 3: drawer -->
+<div class="scrim" id="scrim"></div>
+<aside class="sheet" id="sheet" aria-hidden="true" aria-label="下钻详情">
+  <div class="dragbar" id="dragbar"></div>
+  <div class="sheet-head">
+    <div style="flex:1; min-width:0">
+      <button class="sheet-back" id="sheet-back" hidden>← 返回</button>
+      <div id="sheet-title"></div>
+    </div>
+    <button class="sheet-close" id="sheet-close" aria-label="关闭">✕</button>
+  </div>
+  <div class="sheet-body" id="sheet-body"></div>
+</aside>
+
+<script>
+var DATA = {"asof":"2026-10-16","generated":"2026-10-18 23:04:35","quotes":[{"symbol":"AG0","name":"沪银","sector":"贵金属","close":14029.0,"date":"2026-10-16","chg60":3.57},{"symbol":"AL0","name":"沪铝","sector":"有色","close":23270.0,"date":"2026-10-16","chg60":0.34},{"symbol":"AO0","name":"氧化铝","sector":"有色","close":2631.0,"date":"2026-10-16","chg60":-0.94},{"symbol":"AU0","name":"沪金","sector":"贵金属","close":901.82,"date":"2026-10-16","chg60":2.92},{"symbol":"C0","name":"玉米","sector":"粮食","close":2206.0,"date":"2026-10-16","chg60":-3.54},{"symbol":"CF0","name":"棉花","sector":"软商品","close":15850.0,"date":"2026-10-16","chg60":0.63},{"symbol":"CU0","name":"沪铜","sector":"有色","close":109860.0,"date":"2026-10-16","chg60":6.28},{"symbol":"HC0","name":"热卷","sector":"黑色","close":3242.0,"date":"2026-10-16","chg60":-2.29},{"symbol":"I0","name":"铁矿石","sector":"黑色","close":672.5,"date":"2026-10-16","chg60":-11.75},{"symbol":"J0","name":"焦炭","sector":"黑色","close":1972.5,"date":"2026-10-16","chg60":5.82},{"symbol":"JM0","name":"焦煤","sector":"黑色","close":1482.0,"date":"2026-10-16","chg60":17.57},{"symbol":"LC0","name":"碳酸锂","sector":"电池材料","close":96320.0,"date":"2026-10-16","chg60":-35.85},{"symbol":"M0","name":"豆粕","sector":"油粕","close":3281.0,"date":"2026-10-16","chg60":7.19},{"symbol":"NI0","name":"沪镍","sector":"有色","close":115240.0,"date":"2026-10-16","chg60":-10.59},{"symbol":"P0","name":"棕榈油","sector":"油粕","close":9474.0,"date":"2026-10-16","chg60":2.62},{"symbol":"PB0","name":"沪铅","sector":"有色","close":16075.0,"date":"2026-10-16","chg60":1.26},{"symbol":"RB0","name":"螺纹钢","sector":"黑色","close":3074.0,"date":"2026-10-16","chg60":-1.22},{"symbol":"RM0","name":"菜粕","sector":"油粕","close":2349.0,"date":"2026-10-16","chg60":2.76},{"symbol":"SF0","name":"硅铁","sector":"硅铁","close":5848.0,"date":"2026-10-16","chg60":1.11},{"symbol":"SI0","name":"工业硅","sector":"电池材料","close":8925.0,"date":"2026-10-16","chg60":7.27},{"symbol":"SM0","name":"锰硅","sector":"合金","close":5816.0,"date":"2026-10-16","chg60":-0.1},{"symbol":"SN0","name":"沪锡","sector":"有色","close":376860.0,"date":"2026-10-16","chg60":-6.71},{"symbol":"SR0","name":"白糖","sector":"软商品","close":5408.0,"date":"2026-10-16","chg60":5.54},{"symbol":"SS0","name":"不锈钢","sector":"黑色","close":13215.0,"date":"2026-10-16","chg60":-9.8},{"symbol":"Y0","name":"豆油","sector":"油粕","close":8844.0,"date":"2026-10-16","chg60":3.62},{"symbol":"ZN0","name":"沪锌","sector":"有色","close":25440.0,"date":"2026-10-16","chg60":3.99},{"symbol":"lh0","name":"生猪","sector":"畜牧","close":10490.0,"date":"2026-10-16","chg60":-10.84}],"alerts_v21":[],"valids_v21":[],"monitor_alerts":[{"pair":"CU0-SN0","an":"沪铜","bn":"沪锡","triggers":["价差Z=2.33突破±2"],"z":2.33,"hl":5.7}],"tails":[{"pair":"RB0-HC0","an":"螺纹钢","bn":"热卷","joint":0.075,"ratio":7.5},{"pair":"AU0-AG0","an":"沪金","bn":"沪银","joint":0.0575,"ratio":5.75},{"pair":"M0-RM0","an":"豆粕","bn":"菜粕","joint":0.0665,"ratio":6.65},{"pair":"P0-Y0","an":"棕榈油","bn":"豆油","joint":0.0714,"ratio":7.14},{"pair":"CU0-AL0","an":"沪铜","bn":"沪铝","joint":0.0449,"ratio":4.49},{"pair":"M0-Y0","an":"豆粕","bn":"豆油","joint":0.0372,"ratio":3.72},{"pair":"SR0-CF0","an":"白糖","bn":"棉花","joint":0.0251,"ratio":2.51},{"pair":"JM0-J0","an":"焦煤","bn":"焦炭","joint":0.0633,"ratio":6.33}],"baselines":[{"pair":"CU0-ZN0","an":"沪铜","bn":"沪锌","sign_rate":1.0,"r":0.64,"ewma_now":0.487,"ewma_dev":-0.155},{"pair":"RB0-J0","an":"螺纹钢","bn":"焦炭","sign_rate":1.0,"r":0.661,"ewma_now":0.671,"ewma_dev":0.018},{"pair":"NI0-SS0","an":"沪镍","bn":"不锈钢","sign_rate":0.987,"r":0.66,"ewma_now":0.771,"ewma_dev":0.065},{"pair":"HC0-J0","an":"热卷","bn":"焦炭","sign_rate":1.0,"r":0.648,"ewma_now":0.709,"ewma_dev":0.009},{"pair":"AL0-ZN0","an":"沪铝","bn":"沪锌","sign_rate":0.986,"r":0.587,"ewma_now":0.563,"ewma_dev":0.132},{"pair":"CU0-AL0","an":"沪铜","bn":"沪铝","sign_rate":0.971,"r":0.612,"ewma_now":0.399,"ewma_dev":-0.118},{"pair":"AU0-AG0","an":"沪金","bn":"沪银","sign_rate":1.0,"r":0.715,"ewma_now":0.86,"ewma_dev":-0.004},{"pair":"SM0-SF0","an":"锰硅","bn":"硅铁","sign_rate":1.0,"r":0.691,"ewma_now":0.704,"ewma_dev":0.077},{"pair":"NI0-SN0","an":"沪镍","bn":"沪锡","sign_rate":0.985,"r":0.531,"ewma_now":0.43,"ewma_dev":-0.064},{"pair":"HC0-JM0","an":"热卷","bn":"焦煤","sign_rate":0.953,"r":0.603,"ewma_now":0.554,"ewma_dev":0.01},{"pair":"I0-J0","an":"铁矿石","bn":"焦炭","sign_rate":0.984,"r":0.605,"ewma_now":0.246,"ewma_dev":-0.074},{"pair":"CU0-NI0","an":"沪铜","bn":"沪镍","sign_rate":1.0,"r":0.552,"ewma_now":0.288,"ewma_dev":-0.083},{"pair":"RB0-I0","an":"螺纹钢","bn":"铁矿石","sign_rate":0.984,"r":0.691,"ewma_now":0.638,"ewma_dev":-0.025},{"pair":"CU0-SN0","an":"沪铜","bn":"沪锡","sign_rate":0.984,"r":0.586,"ewma_now":0.452,"ewma_dev":-0.259},{"pair":"HC0-I0","an":"热卷","bn":"铁矿石","sign_rate":0.984,"r":0.684,"ewma_now":0.656,"ewma_dev":-0.033},{"pair":"ZN0-NI0","an":"沪锌","bn":"沪镍","sign_rate":1.0,"r":0.507,"ewma_now":0.224,"ewma_dev":0.055},{"pair":"ZN0-SN0","an":"沪锌","bn":"沪锡","sign_rate":1.0,"r":0.532,"ewma_now":0.541,"ewma_dev":-0.015},{"pair":"AL0-SN0","an":"沪铝","bn":"沪锡","sign_rate":0.962,"r":0.508,"ewma_now":0.472,"ewma_dev":0.031},{"pair":"P0-Y0","an":"棕榈油","bn":"豆油","sign_rate":1.0,"r":0.745,"ewma_now":0.819,"ewma_dev":0.051},{"pair":"HC0-SF0","an":"热卷","bn":"硅铁","sign_rate":0.959,"r":0.505,"ewma_now":0.361,"ewma_dev":-0.047},{"pair":"RB0-SM0","an":"螺纹钢","bn":"锰硅","sign_rate":1.0,"r":0.527,"ewma_now":0.42,"ewma_dev":-0.061},{"pair":"HC0-SM0","an":"热卷","bn":"锰硅","sign_rate":1.0,"r":0.52,"ewma_now":0.448,"ewma_dev":-0.025},{"pair":"M0-RM0","an":"豆粕","bn":"菜粕","sign_rate":0.978,"r":0.746,"ewma_now":0.828,"ewma_dev":0.036},{"pair":"AL0-NI0","an":"沪铝","bn":"沪镍","sign_rate":0.956,"r":0.508,"ewma_now":0.543,"ewma_dev":0.115},{"pair":"JM0-SF0","an":"焦煤","bn":"硅铁","sign_rate":0.978,"r":0.505,"ewma_now":0.428,"ewma_dev":0.056},{"pair":"RB0-SF0","an":"螺纹钢","bn":"硅铁","sign_rate":0.977,"r":0.506,"ewma_now":0.354,"ewma_dev":-0.09},{"pair":"J0-SM0","an":"焦炭","bn":"锰硅","sign_rate":1.0,"r":0.517,"ewma_now":0.44,"ewma_dev":-0.042},{"pair":"JM0-SM0","an":"焦煤","bn":"锰硅","sign_rate":0.973,"r":0.517,"ewma_now":0.426,"ewma_dev":-0.001},{"pair":"SS0-RB0","an":"不锈钢","bn":"螺纹钢","sign_rate":0.97,"r":0.506,"ewma_now":0.184,"ewma_dev":0.089},{"pair":"I0-SF0","an":"铁矿石","bn":"硅铁","sign_rate":0.969,"r":0.526,"ewma_now":0.197,"ewma_dev":-0.064}],"coints":[{"pair":"CU0-SN0","an":"沪铜","bn":"沪锡","beta":0.712,"half_life":5.7,"adf_p":0.0045},{"pair":"AL0-SN0","an":"沪铝","bn":"沪锡","beta":0.555,"half_life":5.2,"adf_p":0.0},{"pair":"SS0-JM0","an":"不锈钢","bn":"焦煤","beta":0.345,"half_life":29.2,"adf_p":0.0007},{"pair":"SS0-SF0","an":"不锈钢","bn":"硅铁","beta":0.549,"half_life":21.6,"adf_p":0.0011},{"pair":"SS0-LC0","an":"不锈钢","bn":"碳酸锂","beta":0.142,"half_life":19.9,"adf_p":0.0193},{"pair":"RB0-HC0","an":"螺纹钢","bn":"热卷","beta":1.024,"half_life":25.1,"adf_p":0.0002},{"pair":"RB0-SI0","an":"螺纹钢","bn":"工业硅","beta":0.399,"half_life":11.2,"adf_p":0.0008},{"pair":"HC0-SI0","an":"热卷","bn":"工业硅","beta":0.35,"half_life":14.3,"adf_p":0.0001},{"pair":"I0-SI0","an":"铁矿石","bn":"工业硅","beta":0.23,"half_life":22.8,"adf_p":0.0229},{"pair":"J0-SI0","an":"焦炭","bn":"工业硅","beta":0.666,"half_life":30.0,"adf_p":0.0194},{"pair":"SF0-SI0","an":"硅铁","bn":"工业硅","beta":0.457,"half_life":16.0,"adf_p":0.0002}],"notes":{"step1":"21品种行情+持仓信号（豆粕/玉米+19矿产）","step2":"USDA WASDE：大豆2026/27全球期末124.28、玉米280.44，偏空","step3a":"金全球年产3250吨中国第一；银墨西哥第一","step3b":"主产区降水距平+天气价格相关性","step4a":"金银比+WGC ETF持仓+央行购金","step5":"生猪现货基差+USDA肉类平衡表","step6a":"农业农村部畜产品周报","step6b":"NBS 2026H1能繁母猪3780万头=正常保有量100.8%","dl":"LightGBM T+5方向预测证伪（Sharpe未过0.8门槛），特征无信号是主因"},"stats":{"n_symbols":27,"n_baseline":30,"n_coint":11,"n_alerts":1},"series":{"AG0":{"dates":["2026-04-20","2026-04-21","2026-04-22","2026-04-23","2026-04-24","2026-04-27","2026-04-28","2026-04-29","2026-04-30","2026-05-06","2026-05-07","2026-05-08","2026-05-11","2026-05-12","2026-05-13","2026-05-14","2026-05-15","2026-05-18","2026-05-19","2026-05-20","2026-05-21","2026-05-22","2026-05-25","2026-05-26","2026-05-27","2026-05-28","2026-05-29","2026-06-01","2026-06-02","2026-06-03","2026-06-04","2026-06-05","2026-06-08","2026-06-09","2026-06-10","2026-06-11","2026-06-12","2026-06-15","2026-06-16","2026-06-17","2026-06-18","2026-06-22","2026-06-23","2026-06-24","2026-06-25","2026-06-26","2026-06-29","2026-06-30","2026-07-01","2026-07-02","2026-07-03","2026-07-06","2026-07-07","2026-07-08","2026-07-09","2026-07-10","2026-07-13","2026-07-14","2026-07-15","2026-07-16","2026-07-17","2026-07-20","2026-07-21","2026-07-22","2026-07-23","2026-07-24","2026-07-27","2026-07-28","2026-07-29","2026-07-30","2026-07-31","2026-08-03","2026-08-04","2026-08-05","2026-08-06","2026-08-07","2026-08-10","2026-08-11","2026-08-12","2026-08-13","2026-08-14","2026-08-17","2026-08-18","2026-08-19","2026-08-20","2026-08-21","2026-08-24","2026-08-25","2026-08-26","2026-08-27","2026-08-28","2026-08-31","2026-09-01","2026-09-02","2026-09-03","2026-09-04","2026-09-07","2026-09-08","2026-09-09","2026-09-10","2026-09-11","2026-09-14","2026-09-15","2026-09-16","2026-09-17","2026-09-18","2026-09-21","2026-09-22","2026-09-23","2026-09-24","2026-09-28","2026-09-29","2026-09-30","2026-10-08","2026-10-09","2026-10-12","2026-10-13","2026-10-14","2026-10-15","2026-10-16"],"closes":[19853.0,19653.0,19586.0,18967.0,18442.0,18820.0,18068.0,18099.0,18135.0,18851.0,19493.0,19840.0,19929.0,20779.0,21348.0,21444.0,19234.0,18607.0,18708.0,18484.0,18314.0,18681.0,18995.0,18684.0,18251.0,17790.0,18358.0,18156.0,18522.0,18008.0,17730.0,17528.0,16204.0,16458.0,15622.0,15416.0,15972.0,16876.0,16716.0,16865.0,16493.0,16063.0,14997.0,14950.0,13811.0,14212.0,14272.0,14410.0,14032.0,14650.0,15256.0,15083.0,14880.0,14860.0,14403.0,14656.0,14135.0,14217.0,14241.0,13937.0,13545.0,13753.0,14420.0,14531.0,14614.0,14154.0,14558.0,14088.0,14268.0,14032.0,14264.0,14218.0,14373.0,15105.0,15091.0,15635.0,15705.0,15748.0,16154.0,15823.0,15722.0,16143.0,15961.0,15432.0,16361.0,16771.0,16843.0,16631.0,16756.0,16728.0,17215.0,16293.0,16245.0,15631.0,16045.0,16250.0,15990.0,16125.0,16224.0,16418.0,15586.0,15528.0,15452.0,15832.0,15593.0,16304.0,16140.0,15949.0,16165.0,15661.0,14985.0,14848.0,14980.0,14412.0,14717.0,14816.0,14743.0,14289.0,13660.0,14029.0]},"AL0":{"dates":["2026-04-20","2026-04-21","2026-04-22","2026-04-23","2026-04-24","2026-04-27","2026-04-28","2026-04-29","2026-04-30","2026-05-06","2026-05-07","2026-05-08","2026-05-11","2026-05-12","2026-05-13","2026-05-14","2026-05-15","2026-05-18","2026-05-19","2026-05-20","2026-05-21","2026-05-22","2026-05-25","2026-05-26","2026-05-27","2026-05-28","2026-05-29","2026-06-01","2026-06-02","2026-06-03","2026-06-04","2026-06-05","2026-06-08","2026-06-09","2026-06-10","2026-06-11","2026-06-12","2026-06-15","2026-06-16","2026-06-17","2026-06-18","2026-06-22","2026-06-23","2026-06-24","2026-06-25","2026-06-26","2026-06-29","2026-06-30","2026-07-01","2026-07-02","2026-07-03","2026-07-06","2026-07-07","2026-07-08","2026-07-09","2026-07-10","2026-07-13","2026-07-14","2026-07-15","2026-07-16","2026-07-17","2026-07-20","2026-07-21","2026-07-22","2026-07-23","2026-07-24","2026-07-27","2026-07-28","2026-07-29","2026-07-30","2026-07-31","2026-08-03","2026-08-04","2026-08-05","2026-08-06","2026-08-07","2026-08-10","2026-08-11","2026-08-12","2026-08-13","2026-08-14","2026-08-17","2026-08-18","2026-08-19","2026-08-20","2026-08-21","2026-08-24","2026-08-25","2026-08-26","2026-08-27","2026-08-28","2026-08-31","2026-09-01","2026-09-02","2026-09-03","2026-09-04","2026-09-07","2026-09-08","2026-09-09","2026-09-10","2026-09-11","2026-09-14","2026-09-15","2026-09-16","2026-09-17","2026-09-18","2026-09-21","2026-09-22","2026-09-23","2026-09-24","2026-09-28","2026-09-29","2026-09-30","2026-10-08","2026-10-09","2026-10-12","2026-10-13","2026-10-14","2026-10-15","2026-10-16"],"closes":[25125.0,24900.0,25060.0,24970.0,24865.0,24855.0,24610.0,24615.0,24430.0,24730.0,24380.0,24445.0,24525.0,24560.0,24885.0,24670.0,24360.0,24295.0,24480.0,24525.0,24360.0,24505.0,24465.0,24570.0,24485.0,24285.0,24270.0,24360.0,24825.0,24520.0,24315.0,24300.0,24105.0,24110.0,23905.0,24055.0,24165.0,24170.0,23830.0,23880.0,23980.0,24170.0,23520.0,23455.0,22865.0,23000.0,23085.0,22565.0,22370.0,22400.0,22840.0,22885.0,22940.0,23075.0,23060.0,23055.0,22945.0,23335.0,23205.0,23240.0,23190.0,23010.0,23160.0,23190.0,23345.0,23225.0,23195.0,23220.0,23455.0,23625.0,23630.0,23640.0,23810.0,23785.0,23810.0,24040.0,24165.0,24250.0,24285.0,24090.0,23885.0,24035.0,23955.0,23675.0,23595.0,23710.0,23765.0,23755.0,23760.0,23820.0,23920.0,24075.0,24110.0,24100.0,24370.0,24290.0,24420.0,24460.0,24560.0,24490.0,24235.0,24035.0,24105.0,24185.0,24225.0,24400.0,24220.0,24240.0,24205.0,24200.0,23950.0,24020.0,23830.0,23385.0,23470.0,23465.0,23320.0,23285.0,23040.0,23270.0]},"AO0":{"dates":["2026-04-20","2026-04-21","2026-04-22","2026-04-23","2026-04-24","2026-04-27","2026-04-28","2026-04-29","2026-04-30","2026-05-06","2026-05-07","2026-05-08","2026-05-11","2026-05-12","2026-05-13","2026-05-14","2026-05-15","2026-05-18","2026-05-19","2026-05-20","2026-05-21","2026-05-22","2026-05-25","2026-05-26","2026-05-27","2026-05-28","2026-05-29","2026-06-01","2026-06-02","2026-06-03","2026-06-04","2026-06-05","2026-06-08","2026-06-09","2026-06-10","2026-06-11","2026-06-12","2026-06-15","2026-06-16","2026-06-17","2026-06-18","2026-06-22","2026-06-23","2026-06-24","2026-06-25","2026-06-26","2026-06-29","2026-06-30","2026-07-01","2026-07-02","2026-07-03","2026-07-06","2026-07-07","2026-07-08","2026-07-09","2026-07-10","2026-07-13","2026-07-14","2026-07-15","2026-07-16","2026-07-17","2026-07-20","2026-07-21","2026-07-22","2026-07-23","2026-07-24","2026-07-27","2026-07-28","2026-07-29","2026-07-30","2026-07-31","2026-08-03","2026-08-04","2026-08-05","2026-08-06","2026-08-07","2026-08-10","2026-08-11","2026-08-12","2026-08-13","2026-08-14","2026-08-17","2026-08-18","2026-08-19","2026-08-20","2026-08-21","2026-08-24","2026-08-25","2026-08-26","2026-08-27","2026-08-28","2026-08-31","2026-09-01","2026-09-02","2026-09-03","2026-09-04","2026-09-07","2026-09-08","2026-09-09","2026-09-10","2026-09-11","2026-09-14","2026-09-15","2026-09-16","2026-09-17","2026-09-18","2026-09-21","2026-09-22","2026-09-23","2026-09-24","2026-09-28","2026-09-29","2026-09-30","2026-10-08","2026-10-09","2026-10-12","2026-10-13","2026-10-14","2026-10-15","2026-10-16"],"closes":[2790.0,2826.0,2837.0,2822.0,2807.0,2899.0,2875.0,2862.0,2845.0,2875.0,2869.0,2827.0,2826.0,2785.0,2799.0,2790.0,2727.0,2746.0,2724.0,2713.0,2709.0,2717.0,2746.0,2853.0,2854.0,2868.0,2897.0,2892.0,2851.0,2813.0,2760.0,2766.0,2780.0,2838.0,2894.0,2899.0,2923.0,2908.0,2907.0,2914.0,2898.0,2917.0,2843.0,2874.0,2822.0,2801.0,2827.0,2782.0,2786.0,2734.0,2719.0,2720.0,2701.0,2716.0,2720.0,2715.0,2678.0,2695.0,2706.0,2689.0,2656.0,2710.0,2727.0,2721.0,2712.0,2710.0,2687.0,2683.0,2683.0,2648.0,2621.0,2633.0,2641.0,2666.0,2696.0,2698.0,2694.0,2727.0,2711.0,2680.0,2696.0,2697.0,2681.0,2668.0,2663.0,2698.0,2690.0,2676.0,2638.0,2614.0,2648.0,2687.0,2693.0,2708.0,2756.0,2795.0,2773.0,2784.0,2773.0,2758.0,2697.0,2683.0,2681.0,2688.0,2682.0,2695.0,2718.0,2737.0,2692.0,2687.0,2693.0,2656.0,2723.0,2685.0,2699.0,2689.0,2639.0,2626.0,2584.0,2631.0]},"AU0":{"dates":["2026-04-20","2026-04-21","2026-04-22","2026-04-23","2026-04-24","2026-04-27","2026-04-28","2026-04-29","2026-04-30","2026-05-06","2026-05-07","2026-05-08","2026-05-11","2026-05-12","2026-05-13","2026-05-14","2026-05-15","2026-05-18","2026-05-19","2026-05-20","2026-05-21","2026-05-22","2026-05-25","2026-05-26","2026-05-27","2026-05-28","2026-05-29","2026-06-01","2026-06-02","2026-06-03","2026-06-04","2026-06-05","2026-06-08","2026-06-09","2026-06-10","2026-06-11","2026-06-12","2026-06-15","2026-06-16","2026-06-17","2026-06-18","2026-06-22","2026-06-23","2026-06-24","2026-06-25","2026-06-26","2026-06-29","2026-06-30","2026-07-01","2026-07-02","2026-07-03","2026-07-06","2026-07-07","2026-07-08","2026-07-09","2026-07-10","2026-07-13","2026-07-14","2026-07-15","2026-07-16","2026-07-17","2026-07-20","2026-07-21","2026-07-22","2026-07-23","2026-07-24","2026-07-27","2026-07-28","2026-07-29","2026-07-30","2026-07-31","2026-08-03","2026-08-04","2026-08-05","2026-08-06","2026-08-07","2026-08-10","2026-08-11","2026-08-12","2026-08-13","2026-08-14","2026-08-17","2026-08-18","2026-08-19","2026-08-20","2026-08-21","2026-08-24","2026-08-25","2026-08-26","2026-08-27","2026-08-28","2026-08-31","2026-09-01","2026-09-02","2026-09-03","2026-09-04","2026-09-07","2026-09-08","2026-09-09","2026-09-10","2026-09-11","2026-09-14","2026-09-15","2026-09-16","2026-09-17","2026-09-18","2026-09-21","2026-09-22","2026-09-23","2026-09-24","2026-09-28","2026-09-29","2026-09-30","2026-10-08","2026-10-09","2026-10-12","2026-10-13","2026-10-14","2026-10-15","2026-10-16"],"closes":[1054.96,1051.7,1051.4,1040.06,1032.12,1039.42,1022.1,1011.88,1016.12,1028.48,1040.98,1038.22,1026.8,1030.12,1030.56,1029.6,1004.38,999.8,1002.18,986.64,995.38,995.76,1001.4,995.0,983.56,961.18,989.4,983.58,990.6,977.08,977.94,974.02,942.2,947.04,919.32,895.0,911.62,938.94,941.72,942.94,937.96,916.92,897.9,896.04,872.0,883.3,888.72,881.24,869.82,890.66,911.4,907.82,903.76,902.76,898.86,897.94,885.94,880.26,880.1,879.18,876.24,876.64,892.4,901.74,901.76,883.8,895.78,885.1,884.2,881.4,888.3,886.64,886.48,910.4,926.9,936.76,948.2,949.94,958.54,952.96,943.16,955.72,956.4,945.56,972.94,987.44,1006.82,1004.22,1003.0,995.3,999.28,961.92,959.94,938.22,958.38,965.96,950.78,953.12,952.22,957.18,944.94,937.6,932.3,940.52,935.0,951.38,942.9,935.78,939.5,927.66,904.66,898.78,910.58,893.12,908.64,905.52,907.02,896.64,893.6,901.82]},"C0":{"dates":["2026-04-20","2026-04-21","2026-04-22","2026-04-23","2026-04-24","2026-04-27","2026-04-28","2026-04-29","2026-04-30","2026-05-06","2026-05-07","2026-05-08","2026-05-11","2026-05-12","2026-05-13","2026-05-14","2026-05-15","2026-05-18","2026-05-19","2026-05-20","2026-05-21","2026-05-22","2026-05-25","2026-05-26","2026-05-27","2026-05-28","2026-05-29","2026-06-01","2026-06-02","2026-06-03","2026-06-04","2026-06-05","2026-06-08","2026-06-09","2026-06-10","2026-06-11","2026-06-12","2026-06-15","2026-06-16","2026-06-17","2026-06-18","2026-06-22","2026-06-23","2026-06-24","2026-06-25","2026-06-26","2026-06-29","2026-06-30","2026-07-01","2026-07-02","2026-07-03","2026-07-06","2026-07-07","2026-07-08","2026-07-09","2026-07-10","2026-07-13","2026-07-14","2026-07-15","2026-07-16","2026-07-17","2026-07-20","2026-07-21","2026-07-22","2026-07-23","2026-07-24","2026-07-27","2026-07-28","2026-07-29","2026-07-30","2026-07-31","2026-08-03","2026-08-04","2026-08-05","2026-08-06","2026-08-07","2026-08-10","2026-08-11","2026-08-12","2026-08-13","2026-08-14","2026-08-17","2026-08-18","2026-08-19","2026-08-20","2026-08-21","2026-08-24","2026-08-25","2026-08-26","2026-08-27","2026-08-28","2026-08-31","2026-09-01","2026-09-02","2026-09-03","2026-09-04","2026-09-07","2026-09-08","2026-09-09","2026-09-10","2026-09-11","2026-09-14","2026-09-15","2026-09-16","2026-09-17","2026-09-18","2026-09-21","2026-09-22","2026-09-23","2026-09-24","2026-09-28","2026-09-29","2026-09-30","2026-10-08","2026-10-09","2026-10-12","2026-10-13","2026-10-14","2026-10-15","2026-10-16"],"closes":[2414.0,2432.0,2434.0,2426.0,2417.0,2427.0,2429.0,2431.0,2427.0,2391.0,2377.0,2365.0,2353.0,2359.0,2378.0,2367.0,2355.0,2353.0,2365.0,2351.0,2324.0,2331.0,2327.0,2316.0,2311.0,2310.0,2322.0,2330.0,2333.0,2307.0,2300.0,2323.0,2332.0,2339.0,2335.0,2346.0,2351.0,2320.0,2325.0,2323.0,2329.0,2327.0,2315.0,2326.0,2301.0,2323.0,2337.0,2328.0,2333.0,2329.0,2305.0,2286.0,2305.0,2299.0,2299.0,2311.0,2307.0,2309.0,2303.0,2305.0,2287.0,2274.0,2272.0,2269.0,2278.0,2277.0,2268.0,2266.0,2267.0,2266.0,2269.0,2253.0,2243.0,2251.0,2240.0,2245.0,2266.0,2267.0,2263.0,2231.0,2226.0,2200.0,2226.0,2265.0,2263.0,2264.0,2280.0,2276.0,2281.0,2287.0,2279.0,2299.0,2293.0,2289.0,2306.0,2303.0,2286.0,2299.0,2282.0,2263.0,2255.0,2221.0,2208.0,2216.0,2192.0,2185.0,2170.0,2180.0,2184.0,2181.0,2180.0,2187.0,2187.0,2154.0,2162.0,2176.0,2195.0,2216.0,2211.0,2206.0]},"CF0":{"dates":["2026-04-20","2026-04-21","2026-04-22","2026-04-23","2026-04-24","2026-04-27","2026-04-28","2026-04-29","2026-04-30","2026-05-06","2026-05-07","2026-05-08","2026-05-11","2026-05-12","2026-05-13","2026-05-14","2026-05-15","2026-05-18","2026-05-19","2026-05-20","2026-05-21","2026-05-22","2026-05-25","2026-05-26","2026-05-27","2026-05-28","2026-05-29","2026-06-01","2026-06-02","2026-06-03","2026-06-04","2026-06-05","2026-06-08","2026-06-09","2026-06-10","2026-06-11","2026-06-12","2026-06-15","2026-06-16","2026-06-17","2026-06-18","2026-06-22","2026-06-23","2026-06-24","2026-06-25","2026-06-26","2026-06-29","2026-06-30","2026-07-01","2026-07-02","2026-07-03","2026-07-06","2026-07-07","2026-07-08","2026-07-09","2026-07-10","2026-07-13","2026-07-14","2026-07-15","2026-07-16","2026-07-17","2026-07-20","2026-07-21","2026-07-22","2026-07-23","2026-07-24","2026-07-27","2026-07-28","2026-07-29","2026-07-30","2026-07-31","2026-08-03","2026-08-04","2026-08-05","2026-08-06","2026-08-07","2026-08-10","2026-08-11","2026-08-12","2026-08-13","2026-08-14","2026-08-17","2026-08-18","2026-08-19","2026-08-20","2026-08-21","2026-08-24","2026-08-25","2026-08-26","2026-08-27","2026-08-28","2026-08-31","2026-09-01","2026-09-02","2026-09-03","2026-09-04","2026-09-07","2026-09-08","2026-09-09","2026-09-10","2026-09-11","2026-09-14","2026-09-15","2026-09-16","2026-09-17","2026-09-18","2026-09-21","2026-09-22","2026-09-23","2026-09-24","2026-09-28","2026-09-29","2026-09-30","2026-10-08","2026-10-09","2026-10-12","2026-10-13","2026-10-14","2026-10-15","2026-10-16"],"closes":[16000.0,15985.0,16230.0,16285.0,16195.0,16420.0,16420.0,16385.0,16555.0,16715.0,16640.0,16310.0,16335.0,16375.0,16495.0,16435.0,16085.0,16090.0,16160.0,16120.0,15985.0,15895.0,15935.0,16105.0,16045.0,16150.0,16100.0,16335.0,16355.0,16355.0,16160.0,15915.0,15830.0,15765.0,15675.0,15715.0,15765.0,15745.0,15790.0,16005.0,16010.0,16060.0,15905.0,15915.0,15685.0,15705.0,16070.0,16080.0,16190.0,16125.0,16290.0,16265.0,16330.0,16135.0,15930.0,16125.0,16080.0,16070.0,16075.0,16055.0,15750.0,15925.0,15965.0,15955.0,16005.0,16005.0,15925.0,15830.0,15845.0,15695.0,15745.0,15675.0,15840.0,15990.0,16150.0,16210.0,16265.0,16260.0,16815.0,16725.0,16740.0,16730.0,16830.0,16975.0,17035.0,17065.0,17035.0,16885.0,16910.0,17030.0,17180.0,17125.0,17110.0,16870.0,16825.0,16790.0,16745.0,16820.0,16740.0,16545.0,16380.0,16230.0,16055.0,16040.0,15830.0,15750.0,15870.0,15790.0,15820.0,15835.0,16000.0,15780.0,15615.0,15710.0,15790.0,15850.0,15865.0,15975.0,15835.0,15850.0]},"CU0":{"dates":["2026-04-20","2026-04-21","2026-04-22","2026-04-23","2026-04-24","2026-04-27","2026-04-28","2026-04-29","2026-04-30","2026-05-06","2026-05-07","2026-05-08","2026-05-11","2026-05-12","2026-05-13","2026-05-14","2026-05-15","2026-05-18","2026-05-19","2026-05-20","2026-05-21","2026-05-22","2026-05-25","2026-05-26","2026-05-27","2026-05-28","2026-05-29","2026-06-01","2026-06-02","2026-06-03","2026-06-04","2026-06-05","2026-06-08","2026-06-09","2026-06-10","2026-06-11","2026-06-12","2026-06-15","2026-06-16","2026-06-17","2026-06-18","2026-06-22","2026-06-23","2026-06-24","2026-06-25","2026-06-26","2026-06-29","2026-06-30","2026-07-01","2026-07-02","2026-07-03","2026-07-06","2026-07-07","2026-07-08","2026-07-09","2026-07-10","2026-07-13","2026-07-14","2026-07-15","2026-07-16","2026-07-17","2026-07-20","2026-07-21","2026-07-22","2026-07-23","2026-07-24","2026-07-27","2026-07-28","2026-07-29","2026-07-30","2026-07-31","2026-08-03","2026-08-04","2026-08-05","2026-08-06","2026-08-07","2026-08-10","2026-08-11","2026-08-12","2026-08-13","2026-08-14","2026-08-17","2026-08-18","2026-08-19","2026-08-20","2026-08-21","2026-08-24","2026-08-25","2026-08-26","2026-08-27","2026-08-28","2026-08-31","2026-09-01","2026-09-02","2026-09-03","2026-09-04","2026-09-07","2026-09-08","2026-09-09","2026-09-10","2026-09-11","2026-09-14","2026-09-15","2026-09-16","2026-09-17","2026-09-18","2026-09-21","2026-09-22","2026-09-23","2026-09-24","2026-09-28","2026-09-29","2026-09-30","2026-10-08","2026-10-09","2026-10-12","2026-10-13","2026-10-14","2026-10-15","2026-10-16"],"closes":[102620.0,102140.0,102640.0,102780.0,102460.0,102800.0,102260.0,101630.0,101030.0,102660.0,103000.0,104550.0,104620.0,106510.0,108510.0,106750.0,104710.0,104330.0,104530.0,103980.0,104040.0,104870.0,105650.0,104960.0,104680.0,104150.0,105000.0,104680.0,106620.0,106380.0,105150.0,105150.0,104120.0,104650.0,104110.0,103160.0,104660.0,105590.0,104610.0,105470.0,104860.0,105000.0,103580.0,103550.0,101220.0,101560.0,103160.0,103290.0,101920.0,101950.0,102980.0,102960.0,102970.0,102850.0,103160.0,103710.0,103060.0,104340.0,104140.0,104350.0,103370.0,103790.0,105460.0,105820.0,105890.0,104750.0,105050.0,104810.0,104890.0,104690.0,105460.0,106120.0,106650.0,107340.0,107330.0,108400.0,107850.0,107950.0,108390.0,107410.0,107690.0,109540.0,107930.0,106850.0,107200.0,107520.0,107910.0,107980.0,108750.0,108300.0,108900.0,109100.0,109220.0,108040.0,108410.0,108780.0,109410.0,110620.0,111080.0,112200.0,108990.0,107840.0,107030.0,107740.0,108500.0,109620.0,110180.0,111320.0,110330.0,110130.0,109440.0,109570.0,109680.0,110260.0,110110.0,110630.0,110990.0,111080.0,108940.0,109860.0]},"HC0":{"dates":["2026-04-20","2026-04-21","2026-04-22","2026-04-23","2026-04-24","2026-04-27","2026-04-28","2026-04-29","2026-04-30","2026-05-06","2026-05-07","2026-05-08","2026-05-11","2026-05-12","2026-05-13","2026-05-14","2026-05-15","2026-05-18","2026-05-19","2026-05-20","2026-05-21","2026-05-22","2026-05-25","2026-05-26","2026-05-27","2026-05-28","2026-05-29","2026-06-01","2026-06-02","2026-06-03","2026-06-04","2026-06-05","2026-06-08","2026-06-09","2026-06-10","2026-06-11","2026-06-12","2026-06-15","2026-06-16","2026-06-17","2026-06-18","2026-06-22","2026-06-23","2026-06-24","2026-06-25","2026-06-26","2026-06-29","2026-06-30","2026-07-01","2026-07-02","2026-07-03","2026-07-06","2026-07-07","2026-07-08","2026-07-09","2026-07-10","2026-07-13","2026-07-14","2026-07-15","2026-07-16","2026-07-17","2026-07-20","2026-07-21","2026-07-22","2026-07-23","2026-07-24","2026-07-27","2026-07-28","2026-07-29","2026-07-30","2026-07-31","2026-08-03","2026-08-04","2026-08-05","2026-08-06","2026-08-07","2026-08-10","2026-08-11","2026-08-12","2026-08-13","2026-08-14","2026-08-17","2026-08-18","2026-08-19","2026-08-20","2026-08-21","2026-08-24","2026-08-25","2026-08-26","2026-08-27","2026-08-28","2026-08-31","2026-09-01","2026-09-02","2026-09-03","2026-09-04","2026-09-07","2026-09-08","2026-09-09","2026-09-10","2026-09-11","2026-09-14","2026-09-15","2026-09-16","2026-09-17","2026-09-18","2026-09-21","2026-09-22","2026-09-23","2026-09-24","2026-09-28","2026-09-29","2026-09-30","2026-10-08","2026-10-09","2026-10-12","2026-10-13","2026-10-14","2026-10-15","2026-10-16"],"closes":[3362.0,3366.0,3388.0,3385.0,3392.0,3394.0,3378.0,3407.0,3425.0,3493.0,3492.0,3473.0,3497.0,3471.0,3481.0,3478.0,3446.0,3429.0,3428.0,3418.0,3394.0,3385.0,3432.0,3366.0,3363.0,3365.0,3382.0,3400.0,3399.0,3386.0,3377.0,3381.0,3373.0,3361.0,3380.0,3358.0,3379.0,3397.0,3382.0,3371.0,3349.0,3338.0,3327.0,3325.0,3312.0,3316.0,3319.0,3315.0,3285.0,3283.0,3279.0,3289.0,3283.0,3300.0,3298.0,3291.0,3272.0,3302.0,3327.0,3324.0,3318.0,3298.0,3297.0,3282.0,3291.0,3289.0,3294.0,3281.0,3286.0,3240.0,3220.0,3197.0,3201.0,3207.0,3236.0,3243.0,3235.0,3244.0,3239.0,3233.0,3260.0,3271.0,3281.0,3286.0,3291.0,3295.0,3340.0,3343.0,3342.0,3342.0,3371.0,3411.0,3388.0,3365.0,3368.0,3381.0,3366.0,3395.0,3385.0,3365.0,3325.0,3310.0,3309.0,3323.0,3317.0,3290.0,3308.0,3299.0,3301.0,3298.0,3282.0,3276.0,3274.0,3242.0,3255.0,3255.0,3254.0,3237.0,3242.0,3242.0]},"I0":{"dates":["2026-04-20","2026-04-21","2026-04-22","2026-04-23","2026-04-24","2026-04-27","2026-04-28","2026-04-29","2026-04-30","2026-05-06","2026-05-07","2026-05-08","2026-05-11","2026-05-12","2026-05-13","2026-05-14","2026-05-15","2026-05-18","2026-05-19","2026-05-20","2026-05-21","2026-05-22","2026-05-25","2026-05-26","2026-05-27","2026-05-28","2026-05-29","2026-06-01","2026-06-02","2026-06-03","2026-06-04","2026-06-05","2026-06-08","2026-06-09","2026-06-10","2026-06-11","2026-06-12","2026-06-15","2026-06-16","2026-06-17","2026-06-18","2026-06-22","2026-06-23","2026-06-24","2026-06-25","2026-06-26","2026-06-29","2026-06-30","2026-07-01","2026-07-02","2026-07-03","2026-07-06","2026-07-07","2026-07-08","2026-07-09","2026-07-10","2026-07-13","2026-07-14","2026-07-15","2026-07-16","2026-07-17","2026-07-20","2026-07-21","2026-07-22","2026-07-23","2026-07-24","2026-07-27","2026-07-28","2026-07-29","2026-07-30","2026-07-31","2026-08-03","2026-08-04","2026-08-05","2026-08-06","2026-08-07","2026-08-10","2026-08-11","2026-08-12","2026-08-13","2026-08-14","2026-08-17","2026-08-18","2026-08-19","2026-08-20","2026-08-21","2026-08-24","2026-08-25","2026-08-26","2026-08-27","2026-08-28","2026-08-31","2026-09-01","2026-09-02","2026-09-03","2026-09-04","2026-09-07","2026-09-08","2026-09-09","2026-09-10","2026-09-11","2026-09-14","2026-09-15","2026-09-16","2026-09-17","2026-09-18","2026-09-21","2026-09-22","2026-09-23","2026-09-24","2026-09-28","2026-09-29","2026-09-30","2026-10-08","2026-10-09","2026-10-12","2026-10-13","2026-10-14","2026-10-15","2026-10-16"],"closes":[786.5,784.0,786.5,783.5,786.5,786.0,780.5,787.5,796.0,816.0,817.0,814.5,822.5,812.5,820.0,817.0,809.5,803.0,798.5,800.0,789.5,792.0,793.0,781.0,781.5,780.5,783.5,781.0,786.5,780.0,767.5,766.0,759.0,760.0,771.5,764.0,764.0,771.5,762.0,747.5,747.0,739.5,738.5,744.0,735.0,748.0,746.0,747.0,733.0,740.0,734.0,738.0,735.5,746.0,745.5,751.5,744.5,760.5,762.0,759.5,762.0,758.0,749.0,739.5,747.5,746.0,741.0,741.0,739.0,715.0,716.0,698.0,699.5,706.0,719.0,716.5,701.5,707.5,705.5,705.0,710.5,706.5,714.0,712.0,707.0,707.5,716.0,713.5,720.0,716.5,723.0,727.0,726.5,714.0,726.5,727.0,734.5,744.5,738.0,730.5,718.0,708.5,707.5,709.0,710.5,715.5,715.0,708.0,712.0,713.5,705.0,699.0,702.5,682.5,682.5,683.0,677.0,674.0,671.5,672.5]},"J0":{"dates":["2026-04-20","2026-04-21","2026-04-22","2026-04-23","2026-04-24","2026-04-27","2026-04-28","2026-04-29","2026-04-30","2026-05-06","2026-05-07","2026-05-08","2026-05-11","2026-05-12","2026-05-13","2026-05-14","2026-05-15","2026-05-18","2026-05-19","2026-05-20","2026-05-21","2026-05-22","2026-05-25","2026-05-26","2026-05-27","2026-05-28","2026-05-29","2026-06-01","2026-06-02","2026-06-03","2026-06-04","2026-06-05","2026-06-08","2026-06-09","2026-06-10","2026-06-11","2026-06-12","2026-06-15","2026-06-16","2026-06-17","2026-06-18","2026-06-22","2026-06-23","2026-06-24","2026-06-25","2026-06-26","2026-06-29","2026-06-30","2026-07-01","2026-07-02","2026-07-03","2026-07-06","2026-07-07","2026-07-08","2026-07-09","2026-07-10","2026-07-13","2026-07-14","2026-07-15","2026-07-16","2026-07-17","2026-07-20","2026-07-21","2026-07-22","2026-07-23","2026-07-24","2026-07-27","2026-07-28","2026-07-29","2026-07-30","2026-07-31","2026-08-03","2026-08-04","2026-08-05","2026-08-06","2026-08-07","2026-08-10","2026-08-11","2026-08-12","2026-08-13","2026-08-14","2026-08-17","2026-08-18","2026-08-19","2026-08-20","2026-08-21","2026-08-24","2026-08-25","2026-08-26","2026-08-27","2026-08-28","2026-08-31","2026-09-01","2026-09-02","2026-09-03","2026-09-04","2026-09-07","2026-09-08","2026-09-09","2026-09-10","2026-09-11","2026-09-14","2026-09-15","2026-09-16","2026-09-17","2026-09-18","2026-09-21","2026-09-22","2026-09-23","2026-09-24","2026-09-28","2026-09-29","2026-09-30","2026-10-08","2026-10-09","2026-10-12","2026-10-13","2026-10-14","2026-10-15","2026-10-16"],"closes":[1825.0,1838.0,1844.5,1835.5,1833.0,1848.5,1818.0,1834.0,1841.0,1879.5,1860.0,1828.0,1868.0,1803.0,1816.0,1826.5,1807.0,1771.5,1782.0,1782.0,1755.0,1731.0,1879.0,1851.5,1877.5,1899.5,1903.0,1993.0,1979.0,2000.0,2043.0,2041.5,2022.0,1961.0,1983.0,2011.0,2078.0,2093.0,2083.5,2073.0,2019.5,2015.5,1925.0,1947.5,1932.0,1946.0,1982.5,1958.5,1909.0,1905.0,1938.0,1951.0,1936.0,1956.5,1945.0,1913.0,1865.0,1868.0,1879.5,1864.5,1864.0,1840.0,1837.0,1824.5,1847.0,1840.5,1853.5,1825.0,1845.0,1821.0,1767.0,1753.0,1760.0,1793.0,1832.5,1868.5,1865.0,1910.0,1906.0,1890.5,1911.5,1910.0,2010.0,2058.0,2072.5,2119.5,2152.5,2145.0,2109.5,2135.5,2153.5,2241.5,2202.0,2181.5,2142.0,2171.0,2128.0,2191.5,2160.5,2136.5,2062.5,2055.5,2052.0,2062.0,2043.5,1952.5,1985.0,1984.0,1968.5,1974.5,1952.0,1942.5,1958.5,1953.0,2020.0,2022.5,2039.0,2000.0,1973.0,1972.5]},"JM0":{"dates":["2026-04-20","2026-04-21","2026-04-22","2026-04-23","2026-04-24","2026-04-27","2026-04-28","2026-04-29","2026-04-30","2026-05-06","2026-05-07","2026-05-08","2026-05-11","2026-05-12","2026-05-13","2026-05-14","2026-05-15","2026-05-18","2026-05-19","2026-05-20","2026-05-21","2026-05-22","2026-05-25","2026-05-26","2026-05-27","2026-05-28","2026-05-29","2026-06-01","2026-06-02","2026-06-03","2026-06-04","2026-06-05","2026-06-08","2026-06-09","2026-06-10","2026-06-11","2026-06-12","2026-06-15","2026-06-16","2026-06-17","2026-06-18","2026-06-22","2026-06-23","2026-06-24","2026-06-25","2026-06-26","2026-06-29","2026-06-30","2026-07-01","2026-07-02","2026-07-03","2026-07-06","2026-07-07","2026-07-08","2026-07-09","2026-07-10","2026-07-13","2026-07-14","2026-07-15","2026-07-16","2026-07-17","2026-07-20","2026-07-21","2026-07-22","2026-07-23","2026-07-24","2026-07-27","2026-07-28","2026-07-29","2026-07-30","2026-07-31","2026-08-03","2026-08-04","2026-08-05","2026-08-06","2026-08-07","2026-08-10","2026-08-11","2026-08-12","2026-08-13","2026-08-14","2026-08-17","2026-08-18","2026-08-19","2026-08-20","2026-08-21","2026-08-24","2026-08-25","2026-08-26","2026-08-27","2026-08-28","2026-08-31","2026-09-01","2026-09-02","2026-09-03","2026-09-04","2026-09-07","2026-09-08","2026-09-09","2026-09-10","2026-09-11","2026-09-14","2026-09-15","2026-09-16","2026-09-17","2026-09-18","2026-09-21","2026-09-22","2026-09-23","2026-09-24","2026-09-28","2026-09-29","2026-09-30","2026-10-08","2026-10-09","2026-10-12","2026-10-13","2026-10-14","2026-10-15","2026-10-16"],"closes":[1263.5,1262.0,1273.0,1257.5,1258.5,1277.0,1266.5,1273.5,1287.0,1313.5,1304.0,1286.0,1309.0,1241.0,1244.0,1242.5,1225.0,1208.5,1221.0,1218.0,1190.5,1162.5,1266.5,1260.0,1273.0,1290.0,1285.5,1377.0,1362.5,1381.5,1431.5,1459.0,1429.5,1360.0,1363.5,1362.0,1370.5,1348.5,1343.0,1342.5,1271.0,1275.5,1248.0,1245.5,1238.5,1248.5,1294.5,1280.5,1262.0,1267.5,1282.0,1283.5,1273.0,1293.5,1290.0,1257.5,1239.0,1260.0,1273.0,1261.0,1260.5,1272.0,1275.0,1266.0,1287.5,1285.0,1270.5,1242.5,1248.0,1227.0,1181.0,1182.0,1196.5,1233.0,1235.5,1267.5,1273.5,1343.5,1476.0,1470.5,1515.5,1522.0,1546.5,1586.5,1591.5,1581.5,1584.0,1578.0,1574.0,1609.0,1629.0,1729.0,1694.0,1663.5,1649.0,1666.0,1627.5,1689.5,1655.0,1649.0,1585.0,1588.0,1588.0,1616.0,1580.0,1487.0,1523.0,1518.5,1503.0,1509.0,1457.5,1448.0,1449.0,1476.0,1539.5,1546.0,1566.0,1536.5,1503.0,1482.0]},"LC0":{"dates":["2026-04-20","2026-04-21","2026-04-22","2026-04-23","2026-04-24","2026-04-27","2026-04-28","2026-04-29","2026-04-30","2026-05-06","2026-05-07","2026-05-08","2026-05-11","2026-05-12","2026-05-13","2026-05-14","2026-05-15","2026-05-18","2026-05-19","2026-05-20","2026-05-21","2026-05-22","2026-05-25","2026-05-26","2026-05-27","2026-05-28","2026-05-29","2026-06-01","2026-06-02","2026-06-03","2026-06-04","2026-06-05","2026-06-08","2026-06-09","2026-06-10","2026-06-11","2026-06-12","2026-06-15","2026-06-16","2026-06-17","2026-06-18","2026-06-22","2026-06-23","2026-06-24","2026-06-25","2026-06-26","2026-06-29","2026-06-30","2026-07-01","2026-07-02","2026-07-03","2026-07-06","2026-07-07","2026-07-08","2026-07-09","2026-07-10","2026-07-13","2026-07-14","2026-07-15","2026-07-16","2026-07-17","2026-07-20","2026-07-21","2026-07-22","2026-07-23","2026-07-24","2026-07-27","2026-07-28","2026-07-29","2026-07-30","2026-07-31","2026-08-03","2026-08-04","2026-08-05","2026-08-06","2026-08-07","2026-08-10","2026-08-11","2026-08-12","2026-08-13","2026-08-14","2026-08-17","2026-08-18","2026-08-19","2026-08-20","2026-08-21","2026-08-24","2026-08-25","2026-08-26","2026-08-27","2026-08-28","2026-08-31","2026-09-01","2026-09-02","2026-09-03","2026-09-04","2026-09-07","2026-09-08","2026-09-09","2026-09-10","2026-09-11","2026-09-14","2026-09-15","2026-09-16","2026-09-17","2026-09-18","2026-09-21","2026-09-22","2026-09-23","2026-09-24","2026-09-28","2026-09-29","2026-09-30","2026-10-08","2026-10-09","2026-10-12","2026-10-13","2026-10-14","2026-10-15","2026-10-16"],"closes":[180200.0,174260.0,175240.0,177960.0,177900.0,180560.0,178620.0,183880.0,189080.0,199400.0,199060.0,196560.0,205020.0,205260.0,201960.0,191760.0,188800.0,192180.0,184400.0,183100.0,177600.0,184460.0,181200.0,175960.0,173000.0,178860.0,179740.0,178900.0,172980.0,166760.0,160740.0,164360.0,163340.0,168460.0,167400.0,174600.0,175300.0,174440.0,169980.0,171300.0,160500.0,161740.0,157220.0,162740.0,150840.0,150220.0,153920.0,163360.0,164560.0,164040.0,168780.0,164560.0,163360.0,158440.0,153020.0,151600.0,152240.0,153180.0,149240.0,151660.0,150140.0,143900.0,141620.0,143300.0,145000.0,144280.0,147220.0,143480.0,147900.0,141060.0,137760.0,138900.0,139380.0,143220.0,141460.0,140000.0,146360.0,145860.0,149700.0,152120.0,155240.0,153500.0,155400.0,150660.0,152160.0,158680.0,158860.0,150280.0,152160.0,152020.0,159600.0,161000.0,157860.0,154780.0,149880.0,141940.0,142200.0,143480.0,142000.0,141300.0,134820.0,132340.0,129120.0,125820.0,131180.0,127160.0,132500.0,134400.0,128900.0,124420.0,119040.0,118780.0,118420.0,117300.0,117000.0,104740.0,107060.0,100900.0,98820.0,96320.0]},"M0":{"dates":["2026-04-20","2026-04-21","2026-04-22","2026-04-23","2026-04-24","2026-04-27","2026-04-28","2026-04-29","2026-04-30","2026-05-06","2026-05-07","2026-05-08","2026-05-11","2026-05-12","2026-05-13","2026-05-14","2026-05-15","2026-05-18","2026-05-19","2026-05-20","2026-05-21","2026-05-22","2026-05-25","2026-05-26","2026-05-27","2026-05-28","2026-05-29","2026-06-01","2026-06-02","2026-06-03","2026-06-04","2026-06-05","2026-06-08","2026-06-09","2026-06-10","2026-06-11","2026-06-12","2026-06-15","2026-06-16","2026-06-17","2026-06-18","2026-06-22","2026-06-23","2026-06-24","2026-06-25","2026-06-26","2026-06-29","2026-06-30","2026-07-01","2026-07-02","2026-07-03","2026-07-06","2026-07-07","2026-07-08","2026-07-09","2026-07-10","2026-07-13","2026-07-14","2026-07-15","2026-07-16","2026-07-17","2026-07-20","2026-07-21","2026-07-22","2026-07-23","2026-07-24","2026-07-27","2026-07-28","2026-07-29","2026-07-30","2026-07-31","2026-08-03","2026-08-04","2026-08-05","2026-08-06","2026-08-07","2026-08-10","2026-08-11","2026-08-12","2026-08-13","2026-08-14","2026-08-17","2026-08-18","2026-08-19","2026-08-20","2026-08-21","2026-08-24","2026-08-25","2026-08-26","2026-08-27","2026-08-28","2026-08-31","2026-09-01","2026-09-02","2026-09-03","2026-09-04","2026-09-07","2026-09-08","2026-09-09","2026-09-10","2026-09-11","2026-09-14","2026-09-15","2026-09-16","2026-09-17","2026-09-18","2026-09-21","2026-09-22","2026-09-23","2026-09-24","2026-09-28","2026-09-29","2026-09-30","2026-10-08","2026-10-09","2026-10-12","2026-10-13","2026-10-14","2026-10-15","2026-10-16"],"closes":[2967.0,2978.0,3026.0,2994.0,2984.0,2993.0,3006.0,3020.0,3021.0,3007.0,2988.0,3003.0,3039.0,3033.0,3048.0,3028.0,2979.0,2985.0,3038.0,3025.0,2993.0,2990.0,2973.0,2971.0,2971.0,2994.0,2991.0,2993.0,2973.0,2976.0,2943.0,2918.0,2905.0,2895.0,2918.0,2939.0,2941.0,2941.0,2945.0,2957.0,2942.0,2934.0,2947.0,2952.0,2958.0,2974.0,2967.0,2943.0,2965.0,2977.0,2962.0,3026.0,3045.0,3051.0,3052.0,3049.0,3050.0,3049.0,3066.0,3067.0,3061.0,3129.0,3148.0,3146.0,3175.0,3225.0,3164.0,3101.0,3109.0,3074.0,3071.0,3067.0,3135.0,3123.0,3134.0,3154.0,3148.0,3140.0,3142.0,3152.0,3165.0,3176.0,3241.0,3246.0,3267.0,3228.0,3232.0,3245.0,3297.0,3355.0,3340.0,3350.0,3377.0,3361.0,3382.0,3423.0,3408.0,3415.0,3425.0,3402.0,3402.0,3361.0,3385.0,3479.0,3477.0,3397.0,3386.0,3416.0,3404.0,3426.0,3363.0,3359.0,3372.0,3366.0,3402.0,3383.0,3361.0,3373.0,3316.0,3281.0]},"NI0":{"dates":["2026-04-20","2026-04-21","2026-04-22","2026-04-23","2026-04-24","2026-04-27","2026-04-28","2026-04-29","2026-04-30","2026-05-06","2026-05-07","2026-05-08","2026-05-11","2026-05-12","2026-05-13","2026-05-14","2026-05-15","2026-05-18","2026-05-19","2026-05-20","2026-05-21","2026-05-22","2026-05-25","2026-05-26","2026-05-27","2026-05-28","2026-05-29","2026-06-01","2026-06-02","2026-06-03","2026-06-04","2026-06-05","2026-06-08","2026-06-09","2026-06-10","2026-06-11","2026-06-12","2026-06-15","2026-06-16","2026-06-17","2026-06-18","2026-06-22","2026-06-23","2026-06-24","2026-06-25","2026-06-26","2026-06-29","2026-06-30","2026-07-01","2026-07-02","2026-07-03","2026-07-06","2026-07-07","2026-07-08","2026-07-09","2026-07-10","2026-07-13","2026-07-14","2026-07-15","2026-07-16","2026-07-17","2026-07-20","2026-07-21","2026-07-22","2026-07-23","2026-07-24","2026-07-27","2026-07-28","2026-07-29","2026-07-30","2026-07-31","2026-08-03","2026-08-04","2026-08-05","2026-08-06","2026-08-07","2026-08-10","2026-08-11","2026-08-12","2026-08-13","2026-08-14","2026-08-17","2026-08-18","2026-08-19","2026-08-20","2026-08-21","2026-08-24","2026-08-25","2026-08-26","2026-08-27","2026-08-28","2026-08-31","2026-09-01","2026-09-02","2026-09-03","2026-09-04","2026-09-07","2026-09-08","2026-09-09","2026-09-10","2026-09-11","2026-09-14","2026-09-15","2026-09-16","2026-09-17","2026-09-18","2026-09-21","2026-09-22","2026-09-23","2026-09-24","2026-09-28","2026-09-29","2026-09-30","2026-10-08","2026-10-09","2026-10-12","2026-10-13","2026-10-14","2026-10-15","2026-10-16"],"closes":[141930.0,140460.0,142010.0,142120.0,144750.0,149310.0,149340.0,150550.0,148870.0,154690.0,149700.0,146450.0,147620.0,145280.0,147190.0,144470.0,143330.0,142970.0,144990.0,145390.0,142770.0,143330.0,144480.0,142600.0,143680.0,143370.0,143670.0,143580.0,144850.0,143070.0,138770.0,138490.0,139090.0,137620.0,135100.0,133980.0,134540.0,136490.0,135870.0,135740.0,136700.0,136990.0,133250.0,130700.0,130860.0,129060.0,129480.0,127140.0,125580.0,125190.0,127380.0,126890.0,126700.0,125640.0,127980.0,128180.0,127710.0,129550.0,128120.0,132940.0,128890.0,129920.0,130620.0,131480.0,133160.0,133710.0,132850.0,131010.0,131660.0,131280.0,131680.0,129430.0,132470.0,130800.0,127460.0,130460.0,129740.0,129270.0,128710.0,128000.0,127040.0,128710.0,128740.0,127850.0,129460.0,129200.0,129860.0,129120.0,129310.0,128680.0,128310.0,127000.0,128070.0,126910.0,128890.0,127780.0,127820.0,127400.0,127360.0,128270.0,126080.0,124420.0,123950.0,122040.0,123780.0,124280.0,123890.0,124930.0,125660.0,125320.0,123940.0,123040.0,122040.0,118750.0,119100.0,117810.0,118490.0,118320.0,116060.0,115240.0]},"P0":{"dates":["2026-04-20","2026-04-21","2026-04-22","2026-04-23","2026-04-24","2026-04-27","2026-04-28","2026-04-29","2026-04-30","2026-05-06","2026-05-07","2026-05-08","2026-05-11","2026-05-12","2026-05-13","2026-05-14","2026-05-15","2026-05-18","2026-05-19","2026-05-20","2026-05-21","2026-05-22","2026-05-25","2026-05-26","2026-05-27","2026-05-28","2026-05-29","2026-06-01","2026-06-02","2026-06-03","2026-06-04","2026-06-05","2026-06-08","2026-06-09","2026-06-10","2026-06-11","2026-06-12","2026-06-15","2026-06-16","2026-06-17","2026-06-18","2026-06-22","2026-06-23","2026-06-24","2026-06-25","2026-06-26","2026-06-29","2026-06-30","2026-07-01","2026-07-02","2026-07-03","2026-07-06","2026-07-07","2026-07-08","2026-07-09","2026-07-10","2026-07-13","2026-07-14","2026-07-15","2026-07-16","2026-07-17","2026-07-20","2026-07-21","2026-07-22","2026-07-23","2026-07-24","2026-07-27","2026-07-28","2026-07-29","2026-07-30","2026-07-31","2026-08-03","2026-08-04","2026-08-05","2026-08-06","2026-08-07","2026-08-10","2026-08-11","2026-08-12","2026-08-13","2026-08-14","2026-08-17","2026-08-18","2026-08-19","2026-08-20","2026-08-21","2026-08-24","2026-08-25","2026-08-26","2026-08-27","2026-08-28","2026-08-31","2026-09-01","2026-09-02","2026-09-03","2026-09-04","2026-09-07","2026-09-08","2026-09-09","2026-09-10","2026-09-11","2026-09-14","2026-09-15","2026-09-16","2026-09-17","2026-09-18","2026-09-21","2026-09-22","2026-09-23","2026-09-24","2026-09-28","2026-09-29","2026-09-30","2026-10-08","2026-10-09","2026-10-12","2026-10-13","2026-10-14","2026-10-15","2026-10-16"],"closes":[9486.0,9730.0,9822.0,9781.0,9778.0,9785.0,9759.0,9780.0,9821.0,9864.0,9752.0,9680.0,9682.0,9565.0,9492.0,9405.0,9420.0,9576.0,9672.0,9721.0,9518.0,9471.0,9464.0,9433.0,9517.0,9599.0,9592.0,9729.0,9726.0,9766.0,9574.0,9382.0,9424.0,9265.0,9316.0,9393.0,9321.0,9232.0,9357.0,9349.0,9301.0,9366.0,9308.0,9335.0,9160.0,9315.0,9379.0,9272.0,9268.0,9164.0,9104.0,9245.0,9340.0,9341.0,9354.0,9222.0,9212.0,9351.0,9279.0,9244.0,9232.0,9389.0,9240.0,9250.0,9515.0,9570.0,9380.0,9312.0,9385.0,9393.0,9281.0,9253.0,9299.0,9395.0,9385.0,9662.0,9710.0,9744.0,9691.0,9735.0,9838.0,9838.0,9946.0,9994.0,10160.0,10160.0,10145.0,10079.0,10002.0,10045.0,10171.0,10283.0,10297.0,10186.0,10217.0,10230.0,10354.0,10405.0,10307.0,10165.0,10035.0,10025.0,9992.0,10095.0,9959.0,9855.0,9816.0,9828.0,9718.0,9806.0,9630.0,9565.0,9581.0,9509.0,9643.0,9684.0,9625.0,9733.0,9446.0,9474.0]},"PB0":{"dates":["2026-04-20","2026-04-21","2026-04-22","2026-04-23","2026-04-24","2026-04-27","2026-04-28","2026-04-29","2026-04-30","2026-05-06","2026-05-07","2026-05-08","2026-05-11","2026-05-12","2026-05-13","2026-05-14","2026-05-15","2026-05-18","2026-05-19","2026-05-20","2026-05-21","2026-05-22","2026-05-25","2026-05-26","2026-05-27","2026-05-28","2026-05-29","2026-06-01","2026-06-02","2026-06-03","2026-06-04","2026-06-05","2026-06-08","2026-06-09","2026-06-10","2026-06-11","2026-06-12","2026-06-15","2026-06-16","2026-06-17","2026-06-18","2026-06-22","2026-06-23","2026-06-24","2026-06-25","2026-06-26","2026-06-29","2026-06-30","2026-07-01","2026-07-02","2026-07-03","2026-07-06","2026-07-07","2026-07-08","2026-07-09","2026-07-10","2026-07-13","2026-07-14","2026-07-15","2026-07-16","2026-07-17","2026-07-20","2026-07-21","2026-07-22","2026-07-23","2026-07-24","2026-07-27","2026-07-28","2026-07-29","2026-07-30","2026-07-31","2026-08-03","2026-08-04","2026-08-05","2026-08-06","2026-08-07","2026-08-10","2026-08-11","2026-08-12","2026-08-13","2026-08-14","2026-08-17","2026-08-18","2026-08-19","2026-08-20","2026-08-21","2026-08-24","2026-08-25","2026-08-26","2026-08-27","2026-08-28","2026-08-31","2026-09-01","2026-09-02","2026-09-03","2026-09-04","2026-09-07","2026-09-08","2026-09-09","2026-09-10","2026-09-11","2026-09-14","2026-09-15","2026-09-16","2026-09-17","2026-09-18","2026-09-21","2026-09-22","2026-09-23","2026-09-24","2026-09-28","2026-09-29","2026-09-30","2026-10-08","2026-10-09","2026-10-12","2026-10-13","2026-10-14","2026-10-15","2026-10-16"],"closes":[16765.0,16885.0,16730.0,16660.0,16670.0,16715.0,16695.0,16745.0,16630.0,16980.0,16820.0,16710.0,16675.0,16580.0,16615.0,16590.0,16510.0,16475.0,16515.0,16540.0,16645.0,16735.0,16755.0,16755.0,16730.0,16595.0,16560.0,16560.0,16600.0,16635.0,16435.0,16405.0,16340.0,16170.0,16130.0,16220.0,16055.0,16240.0,16310.0,16470.0,16450.0,16385.0,16350.0,16330.0,16205.0,16280.0,16230.0,15995.0,15875.0,15765.0,15885.0,15895.0,15905.0,16065.0,16140.0,16015.0,15920.0,15885.0,15570.0,15710.0,15875.0,15810.0,15885.0,15725.0,15905.0,15725.0,15635.0,15625.0,15810.0,15740.0,15550.0,15430.0,15445.0,15755.0,15650.0,15730.0,15870.0,15925.0,15925.0,15940.0,15830.0,15950.0,15905.0,15930.0,15935.0,16130.0,16165.0,16130.0,16120.0,16110.0,16245.0,16370.0,16160.0,16155.0,16120.0,16130.0,16210.0,16135.0,16185.0,16170.0,16135.0,15825.0,15775.0,15870.0,16130.0,16325.0,16415.0,16430.0,16335.0,16270.0,16210.0,16275.0,16180.0,16090.0,15980.0,16105.0,16280.0,16230.0,16180.0,16075.0]},"RB0":{"dates":["2026-04-20","2026-04-21","2026-04-22","2026-04-23","2026-04-24","2026-04-27","2026-04-28","2026-04-29","2026-04-30","2026-05-06","2026-05-07","2026-05-08","2026-05-11","2026-05-12","2026-05-13","2026-05-14","2026-05-15","2026-05-18","2026-05-19","2026-05-20","2026-05-21","2026-05-22","2026-05-25","2026-05-26","2026-05-27","2026-05-28","2026-05-29","2026-06-01","2026-06-02","2026-06-03","2026-06-04","2026-06-05","2026-06-08","2026-06-09","2026-06-10","2026-06-11","2026-06-12","2026-06-15","2026-06-16","2026-06-17","2026-06-18","2026-06-22","2026-06-23","2026-06-24","2026-06-25","2026-06-26","2026-06-29","2026-06-30","2026-07-01","2026-07-02","2026-07-03","2026-07-06","2026-07-07","2026-07-08","2026-07-09","2026-07-10","2026-07-13","2026-07-14","2026-07-15","2026-07-16","2026-07-17","2026-07-20","2026-07-21","2026-07-22","2026-07-23","2026-07-24","2026-07-27","2026-07-28","2026-07-29","2026-07-30","2026-07-31","2026-08-03","2026-08-04","2026-08-05","2026-08-06","2026-08-07","2026-08-10","2026-08-11","2026-08-12","2026-08-13","2026-08-14","2026-08-17","2026-08-18","2026-08-19","2026-08-20","2026-08-21","2026-08-24","2026-08-25","2026-08-26","2026-08-27","2026-08-28","2026-08-31","2026-09-01","2026-09-02","2026-09-03","2026-09-04","2026-09-07","2026-09-08","2026-09-09","2026-09-10","2026-09-11","2026-09-14","2026-09-15","2026-09-16","2026-09-17","2026-09-18","2026-09-21","2026-09-22","2026-09-23","2026-09-24","2026-09-28","2026-09-29","2026-09-30","2026-10-08","2026-10-09","2026-10-12","2026-10-13","2026-10-14","2026-10-15","2026-10-16"],"closes":[3172.0,3176.0,3186.0,3181.0,3191.0,3190.0,3176.0,3195.0,3214.0,3264.0,3273.0,3263.0,3286.0,3255.0,3257.0,3255.0,3232.0,3206.0,3204.0,3189.0,3175.0,3168.0,3218.0,3146.0,3144.0,3145.0,3158.0,3177.0,3180.0,3169.0,3157.0,3165.0,3157.0,3156.0,3180.0,3156.0,3178.0,3187.0,3169.0,3155.0,3131.0,3127.0,3112.0,3111.0,3098.0,3093.0,3095.0,3088.0,3067.0,3067.0,3062.0,3072.0,3068.0,3096.0,3091.0,3087.0,3054.0,3090.0,3115.0,3115.0,3112.0,3096.0,3095.0,3083.0,3085.0,3076.0,3078.0,3060.0,3062.0,3014.0,3004.0,2976.0,2983.0,2990.0,3014.0,3008.0,2997.0,3016.0,3010.0,3002.0,3015.0,3016.0,3023.0,3017.0,3032.0,3039.0,3066.0,3071.0,3076.0,3088.0,3112.0,3197.0,3174.0,3142.0,3142.0,3166.0,3153.0,3177.0,3169.0,3146.0,3108.0,3095.0,3110.0,3126.0,3122.0,3096.0,3117.0,3114.0,3113.0,3118.0,3106.0,3105.0,3112.0,3061.0,3080.0,3090.0,3089.0,3073.0,3071.0,3074.0]},"RM0":{"dates":["2026-04-20","2026-04-21","2026-04-22","2026-04-23","2026-04-24","2026-04-27","2026-04-28","2026-04-29","2026-04-30","2026-05-06","2026-05-07","2026-05-08","2026-05-11","2026-05-12","2026-05-13","2026-05-14","2026-05-15","2026-05-18","2026-05-19","2026-05-20","2026-05-21","2026-05-22","2026-05-25","2026-05-26","2026-05-27","2026-05-28","2026-05-29","2026-06-01","2026-06-02","2026-06-03","2026-06-04","2026-06-05","2026-06-08","2026-06-09","2026-06-10","2026-06-11","2026-06-12","2026-06-15","2026-06-16","2026-06-17","2026-06-18","2026-06-22","2026-06-23","2026-06-24","2026-06-25","2026-06-26","2026-06-29","2026-06-30","2026-07-01","2026-07-02","2026-07-03","2026-07-06","2026-07-07","2026-07-08","2026-07-09","2026-07-10","2026-07-13","2026-07-14","2026-07-15","2026-07-16","2026-07-17","2026-07-20","2026-07-21","2026-07-22","2026-07-23","2026-07-24","2026-07-27","2026-07-28","2026-07-29","2026-07-30","2026-07-31","2026-08-03","2026-08-04","2026-08-05","2026-08-06","2026-08-07","2026-08-10","2026-08-11","2026-08-12","2026-08-13","2026-08-14","2026-08-17","2026-08-18","2026-08-19","2026-08-20","2026-08-21","2026-08-24","2026-08-25","2026-08-26","2026-08-27","2026-08-28","2026-08-31","2026-09-01","2026-09-02","2026-09-03","2026-09-04","2026-09-07","2026-09-08","2026-09-09","2026-09-10","2026-09-11","2026-09-14","2026-09-15","2026-09-16","2026-09-17","2026-09-18","2026-09-21","2026-09-22","2026-09-23","2026-09-24","2026-09-28","2026-09-29","2026-09-30","2026-10-08","2026-10-09","2026-10-12","2026-10-13","2026-10-14","2026-10-15","2026-10-16"],"closes":[2336.0,2356.0,2410.0,2381.0,2371.0,2379.0,2395.0,2417.0,2421.0,2393.0,2369.0,2387.0,2404.0,2376.0,2378.0,2360.0,2324.0,2319.0,2373.0,2375.0,2333.0,2337.0,2312.0,2300.0,2286.0,2304.0,2301.0,2327.0,2299.0,2310.0,2283.0,2256.0,2240.0,2231.0,2239.0,2250.0,2259.0,2262.0,2280.0,2280.0,2286.0,2271.0,2303.0,2316.0,2266.0,2305.0,2296.0,2247.0,2268.0,2275.0,2257.0,2304.0,2318.0,2305.0,2338.0,2325.0,2295.0,2308.0,2315.0,2308.0,2286.0,2333.0,2342.0,2350.0,2360.0,2467.0,2387.0,2335.0,2337.0,2289.0,2316.0,2319.0,2308.0,2186.0,2173.0,2173.0,2174.0,2171.0,2180.0,2178.0,2191.0,2196.0,2251.0,2272.0,2282.0,2238.0,2235.0,2243.0,2314.0,2348.0,2339.0,2323.0,2339.0,2317.0,2361.0,2382.0,2356.0,2366.0,2364.0,2325.0,2326.0,2283.0,2294.0,2381.0,2425.0,2357.0,2341.0,2363.0,2349.0,2360.0,2315.0,2308.0,2333.0,2332.0,2374.0,2362.0,2374.0,2407.0,2340.0,2349.0]},"SF0":{"dates":["2026-04-20","2026-04-21","2026-04-22","2026-04-23","2026-04-24","2026-04-27","2026-04-28","2026-04-29","2026-04-30","2026-05-06","2026-05-07","2026-05-08","2026-05-11","2026-05-12","2026-05-13","2026-05-14","2026-05-15","2026-05-18","2026-05-19","2026-05-20","2026-05-21","2026-05-22","2026-05-25","2026-05-26","2026-05-27","2026-05-28","2026-05-29","2026-06-01","2026-06-02","2026-06-03","2026-06-04","2026-06-05","2026-06-08","2026-06-09","2026-06-10","2026-06-11","2026-06-12","2026-06-15","2026-06-16","2026-06-17","2026-06-18","2026-06-22","2026-06-23","2026-06-24","2026-06-25","2026-06-26","2026-06-29","2026-06-30","2026-07-01","2026-07-02","2026-07-03","2026-07-06","2026-07-07","2026-07-08","2026-07-09","2026-07-10","2026-07-13","2026-07-14","2026-07-15","2026-07-16","2026-07-17","2026-07-20","2026-07-21","2026-07-22","2026-07-23","2026-07-24","2026-07-27","2026-07-28","2026-07-29","2026-07-30","2026-07-31","2026-08-03","2026-08-04","2026-08-05","2026-08-06","2026-08-07","2026-08-10","2026-08-11","2026-08-12","2026-08-13","2026-08-14","2026-08-17","2026-08-18","2026-08-19","2026-08-20","2026-08-21","2026-08-24","2026-08-25","2026-08-26","2026-08-27","2026-08-28","2026-08-31","2026-09-01","2026-09-02","2026-09-03","2026-09-04","2026-09-07","2026-09-08","2026-09-09","2026-09-10","2026-09-11","2026-09-14","2026-09-15","2026-09-16","2026-09-17","2026-09-18","2026-09-21","2026-09-22","2026-09-23","2026-09-24","2026-09-28","2026-09-29","2026-09-30","2026-10-08","2026-10-09","2026-10-12","2026-10-13","2026-10-14","2026-10-15","2026-10-16"],"closes":[5742.0,5710.0,5748.0,5794.0,5742.0,5802.0,5766.0,5810.0,5800.0,5832.0,5902.0,5768.0,5696.0,5762.0,5826.0,5796.0,5732.0,5784.0,5850.0,5876.0,5884.0,5846.0,6072.0,5852.0,5922.0,5886.0,5826.0,5890.0,5890.0,5962.0,5946.0,5870.0,5920.0,5914.0,5880.0,5828.0,5822.0,5750.0,5726.0,5688.0,5694.0,5656.0,5624.0,5600.0,5622.0,5604.0,5646.0,5680.0,5644.0,5714.0,5774.0,5782.0,5818.0,5832.0,5824.0,5792.0,5746.0,5828.0,5796.0,5812.0,5784.0,5782.0,5782.0,5840.0,5830.0,5892.0,5896.0,5812.0,5916.0,5786.0,5782.0,5766.0,5860.0,5880.0,5924.0,5900.0,5882.0,5906.0,5924.0,5896.0,5926.0,5922.0,5974.0,5956.0,5966.0,6022.0,5992.0,6022.0,5924.0,6034.0,6080.0,6170.0,6258.0,6158.0,6364.0,6624.0,6300.0,6392.0,6230.0,6248.0,6072.0,6028.0,6020.0,6052.0,6052.0,6018.0,5990.0,5994.0,5992.0,6012.0,6004.0,5948.0,5994.0,6032.0,6068.0,6016.0,6048.0,5990.0,5966.0,5848.0]},"SI0":{"dates":["2026-04-20","2026-04-21","2026-04-22","2026-04-23","2026-04-24","2026-04-27","2026-04-28","2026-04-29","2026-04-30","2026-05-06","2026-05-07","2026-05-08","2026-05-11","2026-05-12","2026-05-13","2026-05-14","2026-05-15","2026-05-18","2026-05-19","2026-05-20","2026-05-21","2026-05-22","2026-05-25","2026-05-26","2026-05-27","2026-05-28","2026-05-29","2026-06-01","2026-06-02","2026-06-03","2026-06-04","2026-06-05","2026-06-08","2026-06-09","2026-06-10","2026-06-11","2026-06-12","2026-06-15","2026-06-16","2026-06-17","2026-06-18","2026-06-22","2026-06-23","2026-06-24","2026-06-25","2026-06-26","2026-06-29","2026-06-30","2026-07-01","2026-07-02","2026-07-03","2026-07-06","2026-07-07","2026-07-08","2026-07-09","2026-07-10","2026-07-13","2026-07-14","2026-07-15","2026-07-16","2026-07-17","2026-07-20","2026-07-21","2026-07-22","2026-07-23","2026-07-24","2026-07-27","2026-07-28","2026-07-29","2026-07-30","2026-07-31","2026-08-03","2026-08-04","2026-08-05","2026-08-06","2026-08-07","2026-08-10","2026-08-11","2026-08-12","2026-08-13","2026-08-14","2026-08-17","2026-08-18","2026-08-19","2026-08-20","2026-08-21","2026-08-24","2026-08-25","2026-08-26","2026-08-27","2026-08-28","2026-08-31","2026-09-01","2026-09-02","2026-09-03","2026-09-04","2026-09-07","2026-09-08","2026-09-09","2026-09-10","2026-09-11","2026-09-14","2026-09-15","2026-09-16","2026-09-17","2026-09-18","2026-09-21","2026-09-22","2026-09-23","2026-09-24","2026-09-28","2026-09-29","2026-09-30","2026-10-08","2026-10-09","2026-10-12","2026-10-13","2026-10-14","2026-10-15","2026-10-16"],"closes":[8690.0,8655.0,8675.0,8655.0,8615.0,8635.0,8680.0,8775.0,8795.0,8925.0,9080.0,9020.0,9110.0,8795.0,8715.0,8655.0,8480.0,8445.0,8450.0,8460.0,8440.0,8440.0,8570.0,8565.0,8555.0,8590.0,8585.0,8745.0,8690.0,8755.0,8715.0,8700.0,8660.0,8515.0,8785.0,8760.0,8745.0,8670.0,8620.0,8600.0,8560.0,8540.0,8505.0,8495.0,8445.0,8355.0,8415.0,8385.0,8375.0,8330.0,8360.0,8390.0,8350.0,8170.0,8340.0,8430.0,8435.0,8490.0,8425.0,8435.0,8320.0,8270.0,8275.0,8250.0,8295.0,8295.0,8300.0,8185.0,8165.0,8175.0,8170.0,8335.0,8305.0,8370.0,8425.0,8550.0,8580.0,8630.0,8625.0,8610.0,8795.0,8710.0,8725.0,8825.0,8755.0,8790.0,8730.0,8775.0,8775.0,8805.0,8785.0,8865.0,8790.0,8650.0,8735.0,8820.0,8710.0,8880.0,8865.0,8745.0,8605.0,8530.0,8445.0,8440.0,8445.0,8410.0,8455.0,8475.0,8555.0,8530.0,8470.0,8530.0,8565.0,8505.0,8645.0,8695.0,8695.0,8670.0,8495.0,8925.0]},"SM0":{"dates":["2026-04-20","2026-04-21","2026-04-22","2026-04-23","2026-04-24","2026-04-27","2026-04-28","2026-04-29","2026-04-30","2026-05-06","2026-05-07","2026-05-08","2026-05-11","2026-05-12","2026-05-13","2026-05-14","2026-05-15","2026-05-18","2026-05-19","2026-05-20","2026-05-21","2026-05-22","2026-05-25","2026-05-26","2026-05-27","2026-05-28","2026-05-29","2026-06-01","2026-06-02","2026-06-03","2026-06-04","2026-06-05","2026-06-08","2026-06-09","2026-06-10","2026-06-11","2026-06-12","2026-06-15","2026-06-16","2026-06-17","2026-06-18","2026-06-22","2026-06-23","2026-06-24","2026-06-25","2026-06-26","2026-06-29","2026-06-30","2026-07-01","2026-07-02","2026-07-03","2026-07-06","2026-07-07","2026-07-08","2026-07-09","2026-07-10","2026-07-13","2026-07-14","2026-07-15","2026-07-16","2026-07-17","2026-07-20","2026-07-21","2026-07-22","2026-07-23","2026-07-24","2026-07-27","2026-07-28","2026-07-29","2026-07-30","2026-07-31","2026-08-03","2026-08-04","2026-08-05","2026-08-06","2026-08-07","2026-08-10","2026-08-11","2026-08-12","2026-08-13","2026-08-14","2026-08-17","2026-08-18","2026-08-19","2026-08-20","2026-08-21","2026-08-24","2026-08-25","2026-08-26","2026-08-27","2026-08-28","2026-08-31","2026-09-01","2026-09-02","2026-09-03","2026-09-04","2026-09-07","2026-09-08","2026-09-09","2026-09-10","2026-09-11","2026-09-14","2026-09-15","2026-09-16","2026-09-17","2026-09-18","2026-09-21","2026-09-22","2026-09-23","2026-09-24","2026-09-28","2026-09-29","2026-09-30","2026-10-08","2026-10-09","2026-10-12","2026-10-13","2026-10-14","2026-10-15","2026-10-16"],"closes":[6200.0,6200.0,6200.0,6170.0,6146.0,6152.0,6094.0,6114.0,6076.0,6104.0,6048.0,6008.0,5912.0,5878.0,5928.0,5910.0,5842.0,5892.0,5908.0,5920.0,5908.0,5876.0,6074.0,5954.0,5996.0,5980.0,5976.0,6040.0,6044.0,6076.0,6068.0,5980.0,6008.0,5980.0,6016.0,5994.0,6016.0,5954.0,5864.0,5838.0,5856.0,5848.0,5804.0,5770.0,5758.0,5750.0,5762.0,5770.0,5752.0,5782.0,5832.0,5842.0,5892.0,5928.0,5918.0,5872.0,5868.0,5890.0,5882.0,5884.0,5822.0,5802.0,5788.0,5712.0,5670.0,5674.0,5714.0,5694.0,5724.0,5684.0,5680.0,5602.0,5630.0,5634.0,5676.0,5668.0,5710.0,5762.0,5814.0,5806.0,5828.0,5842.0,5898.0,5922.0,5930.0,5964.0,5962.0,5968.0,5980.0,6004.0,6030.0,6090.0,6112.0,6062.0,6100.0,6166.0,5880.0,5956.0,5940.0,5890.0,5852.0,5794.0,5784.0,5794.0,5796.0,5786.0,5808.0,5836.0,5852.0,5846.0,5850.0,5792.0,5796.0,5794.0,5848.0,5862.0,5858.0,5854.0,5890.0,5816.0]},"SN0":{"dates":["2026-04-20","2026-04-21","2026-04-22","2026-04-23","2026-04-24","2026-04-27","2026-04-28","2026-04-29","2026-04-30","2026-05-06","2026-05-07","2026-05-08","2026-05-11","2026-05-12","2026-05-13","2026-05-14","2026-05-15","2026-05-18","2026-05-19","2026-05-20","2026-05-21","2026-05-22","2026-05-25","2026-05-26","2026-05-27","2026-05-28","2026-05-29","2026-06-01","2026-06-02","2026-06-03","2026-06-04","2026-06-05","2026-06-08","2026-06-09","2026-06-10","2026-06-11","2026-06-12","2026-06-15","2026-06-16","2026-06-17","2026-06-18","2026-06-22","2026-06-23","2026-06-24","2026-06-25","2026-06-26","2026-06-29","2026-06-30","2026-07-01","2026-07-02","2026-07-03","2026-07-06","2026-07-07","2026-07-08","2026-07-09","2026-07-10","2026-07-13","2026-07-14","2026-07-15","2026-07-16","2026-07-17","2026-07-20","2026-07-21","2026-07-22","2026-07-23","2026-07-24","2026-07-27","2026-07-28","2026-07-29","2026-07-30","2026-07-31","2026-08-03","2026-08-04","2026-08-05","2026-08-06","2026-08-07","2026-08-10","2026-08-11","2026-08-12","2026-08-13","2026-08-14","2026-08-17","2026-08-18","2026-08-19","2026-08-20","2026-08-21","2026-08-24","2026-08-25","2026-08-26","2026-08-27","2026-08-28","2026-08-31","2026-09-01","2026-09-02","2026-09-03","2026-09-04","2026-09-07","2026-09-08","2026-09-09","2026-09-10","2026-09-11","2026-09-14","2026-09-15","2026-09-16","2026-09-17","2026-09-18","2026-09-21","2026-09-22","2026-09-23","2026-09-24","2026-09-28","2026-09-29","2026-09-30","2026-10-08","2026-10-09","2026-10-12","2026-10-13","2026-10-14","2026-10-15","2026-10-16"],"closes":[390880.0,393090.0,394920.0,391230.0,388600.0,392290.0,384600.0,388300.0,387370.0,415370.0,421500.0,425960.0,423310.0,425060.0,434410.0,426970.0,409060.0,410420.0,409640.0,417720.0,413110.0,422320.0,422990.0,426520.0,421060.0,421170.0,424650.0,431840.0,449820.0,445480.0,430040.0,417850.0,398490.0,407770.0,397880.0,400160.0,407990.0,425560.0,421770.0,422910.0,414330.0,422700.0,400070.0,396110.0,385570.0,387220.0,393060.0,396270.0,389610.0,393260.0,402180.0,410360.0,409250.0,411580.0,416230.0,415680.0,409700.0,417520.0,411620.0,412650.0,403970.0,412480.0,418150.0,416970.0,418740.0,413940.0,421350.0,411610.0,417990.0,416770.0,425570.0,426750.0,429290.0,434030.0,430980.0,434910.0,428000.0,423900.0,431480.0,425650.0,427380.0,432090.0,425940.0,420160.0,426250.0,429030.0,427590.0,425460.0,425260.0,419420.0,423870.0,419000.0,423500.0,412960.0,416090.0,416460.0,418870.0,418950.0,418440.0,425770.0,410290.0,398050.0,392890.0,398430.0,401680.0,407490.0,409000.0,410400.0,410960.0,412790.0,408570.0,409980.0,409600.0,398930.0,391410.0,396810.0,396500.0,377490.0,373260.0,376860.0]},"SR0":{"dates":["2026-04-20","2026-04-21","2026-04-22","2026-04-23","2026-04-24","2026-04-27","2026-04-28","2026-04-29","2026-04-30","2026-05-06","2026-05-07","2026-05-08","2026-05-11","2026-05-12","2026-05-13","2026-05-14","2026-05-15","2026-05-18","2026-05-19","2026-05-20","2026-05-21","2026-05-22","2026-05-25","2026-05-26","2026-05-27","2026-05-28","2026-05-29","2026-06-01","2026-06-02","2026-06-03","2026-06-04","2026-06-05","2026-06-08","2026-06-09","2026-06-10","2026-06-11","2026-06-12","2026-06-15","2026-06-16","2026-06-17","2026-06-18","2026-06-22","2026-06-23","2026-06-24","2026-06-25","2026-06-26","2026-06-29","2026-06-30","2026-07-01","2026-07-02","2026-07-03","2026-07-06","2026-07-07","2026-07-08","2026-07-09","2026-07-10","2026-07-13","2026-07-14","2026-07-15","2026-07-16","2026-07-17","2026-07-20","2026-07-21","2026-07-22","2026-07-23","2026-07-24","2026-07-27","2026-07-28","2026-07-29","2026-07-30","2026-07-31","2026-08-03","2026-08-04","2026-08-05","2026-08-06","2026-08-07","2026-08-10","2026-08-11","2026-08-12","2026-08-13","2026-08-14","2026-08-17","2026-08-18","2026-08-19","2026-08-20","2026-08-21","2026-08-24","2026-08-25","2026-08-26","2026-08-27","2026-08-28","2026-08-31","2026-09-01","2026-09-02","2026-09-03","2026-09-04","2026-09-07","2026-09-08","2026-09-09","2026-09-10","2026-09-11","2026-09-14","2026-09-15","2026-09-16","2026-09-17","2026-09-18","2026-09-21","2026-09-22","2026-09-23","2026-09-24","2026-09-28","2026-09-29","2026-09-30","2026-10-08","2026-10-09","2026-10-12","2026-10-13","2026-10-14","2026-10-15","2026-10-16"],"closes":[5321.0,5371.0,5396.0,5395.0,5397.0,5423.0,5409.0,5406.0,5406.0,5425.0,5447.0,5442.0,5477.0,5504.0,5479.0,5497.0,5437.0,5429.0,5430.0,5392.0,5363.0,5368.0,5346.0,5389.0,5382.0,5378.0,5411.0,5446.0,5433.0,5438.0,5374.0,5341.0,5330.0,5310.0,5314.0,5291.0,5315.0,5321.0,5317.0,5338.0,5320.0,5345.0,5264.0,5241.0,5210.0,5219.0,5270.0,5260.0,5277.0,5267.0,5307.0,5327.0,5316.0,5271.0,5249.0,5284.0,5255.0,5235.0,5229.0,5158.0,5124.0,5157.0,5169.0,5169.0,5190.0,5158.0,5169.0,5143.0,5120.0,5089.0,5053.0,5057.0,5086.0,5108.0,5122.0,5153.0,5207.0,5334.0,5334.0,5291.0,5309.0,5312.0,5319.0,5379.0,5396.0,5383.0,5375.0,5350.0,5340.0,5361.0,5411.0,5403.0,5408.0,5381.0,5433.0,5437.0,5456.0,5506.0,5485.0,5449.0,5441.0,5387.0,5351.0,5369.0,5335.0,5322.0,5328.0,5350.0,5373.0,5404.0,5375.0,5328.0,5354.0,5475.0,5491.0,5518.0,5521.0,5456.0,5382.0,5408.0]},"SS0":{"dates":["2026-04-20","2026-04-21","2026-04-22","2026-04-23","2026-04-24","2026-04-27","2026-04-28","2026-04-29","2026-04-30","2026-05-06","2026-05-07","2026-05-08","2026-05-11","2026-05-12","2026-05-13","2026-05-14","2026-05-15","2026-05-18","2026-05-19","2026-05-20","2026-05-21","2026-05-22","2026-05-25","2026-05-26","2026-05-27","2026-05-28","2026-05-29","2026-06-01","2026-06-02","2026-06-03","2026-06-04","2026-06-05","2026-06-08","2026-06-09","2026-06-10","2026-06-11","2026-06-12","2026-06-15","2026-06-16","2026-06-17","2026-06-18","2026-06-22","2026-06-23","2026-06-24","2026-06-25","2026-06-26","2026-06-29","2026-06-30","2026-07-01","2026-07-02","2026-07-03","2026-07-06","2026-07-07","2026-07-08","2026-07-09","2026-07-10","2026-07-13","2026-07-14","2026-07-15","2026-07-16","2026-07-17","2026-07-20","2026-07-21","2026-07-22","2026-07-23","2026-07-24","2026-07-27","2026-07-28","2026-07-29","2026-07-30","2026-07-31","2026-08-03","2026-08-04","2026-08-05","2026-08-06","2026-08-07","2026-08-10","2026-08-11","2026-08-12","2026-08-13","2026-08-14","2026-08-17","2026-08-18","2026-08-19","2026-08-20","2026-08-21","2026-08-24","2026-08-25","2026-08-26","2026-08-27","2026-08-28","2026-08-31","2026-09-01","2026-09-02","2026-09-03","2026-09-04","2026-09-07","2026-09-08","2026-09-09","2026-09-10","2026-09-11","2026-09-14","2026-09-15","2026-09-16","2026-09-17","2026-09-18","2026-09-21","2026-09-22","2026-09-23","2026-09-24","2026-09-28","2026-09-29","2026-09-30","2026-10-08","2026-10-09","2026-10-12","2026-10-13","2026-10-14","2026-10-15","2026-10-16"],"closes":[14925.0,14805.0,14860.0,14905.0,15185.0,15320.0,15345.0,15530.0,15435.0,15780.0,15620.0,15135.0,15185.0,15135.0,15245.0,14965.0,14885.0,14735.0,14775.0,14900.0,14790.0,14745.0,14790.0,14795.0,14895.0,14895.0,14870.0,14850.0,15065.0,15025.0,14710.0,14610.0,14665.0,14505.0,14385.0,14425.0,14785.0,14945.0,15160.0,15150.0,15170.0,15160.0,14885.0,14695.0,14675.0,14630.0,14770.0,14740.0,14615.0,14575.0,14575.0,14740.0,14775.0,14450.0,14390.0,14290.0,14260.0,14555.0,14510.0,14730.0,14650.0,14680.0,14800.0,14780.0,14855.0,14770.0,14690.0,14515.0,14545.0,14560.0,14635.0,14470.0,14820.0,14475.0,14375.0,14665.0,14615.0,14525.0,14535.0,14385.0,14115.0,14275.0,14330.0,14260.0,14300.0,14200.0,14215.0,14085.0,14225.0,14015.0,14010.0,13890.0,13825.0,13765.0,13825.0,13845.0,13885.0,13830.0,13765.0,13805.0,13580.0,13535.0,13565.0,13540.0,13595.0,13695.0,13725.0,13745.0,13840.0,13815.0,13815.0,13810.0,13700.0,13455.0,13550.0,13430.0,13445.0,13470.0,13175.0,13215.0]},"Y0":{"dates":["2026-04-20","2026-04-21","2026-04-22","2026-04-23","2026-04-24","2026-04-27","2026-04-28","2026-04-29","2026-04-30","2026-05-06","2026-05-07","2026-05-08","2026-05-11","2026-05-12","2026-05-13","2026-05-14","2026-05-15","2026-05-18","2026-05-19","2026-05-20","2026-05-21","2026-05-22","2026-05-25","2026-05-26","2026-05-27","2026-05-28","2026-05-29","2026-06-01","2026-06-02","2026-06-03","2026-06-04","2026-06-05","2026-06-08","2026-06-09","2026-06-10","2026-06-11","2026-06-12","2026-06-15","2026-06-16","2026-06-17","2026-06-18","2026-06-22","2026-06-23","2026-06-24","2026-06-25","2026-06-26","2026-06-29","2026-06-30","2026-07-01","2026-07-02","2026-07-03","2026-07-06","2026-07-07","2026-07-08","2026-07-09","2026-07-10","2026-07-13","2026-07-14","2026-07-15","2026-07-16","2026-07-17","2026-07-20","2026-07-21","2026-07-22","2026-07-23","2026-07-24","2026-07-27","2026-07-28","2026-07-29","2026-07-30","2026-07-31","2026-08-03","2026-08-04","2026-08-05","2026-08-06","2026-08-07","2026-08-10","2026-08-11","2026-08-12","2026-08-13","2026-08-14","2026-08-17","2026-08-18","2026-08-19","2026-08-20","2026-08-21","2026-08-24","2026-08-25","2026-08-26","2026-08-27","2026-08-28","2026-08-31","2026-09-01","2026-09-02","2026-09-03","2026-09-04","2026-09-07","2026-09-08","2026-09-09","2026-09-10","2026-09-11","2026-09-14","2026-09-15","2026-09-16","2026-09-17","2026-09-18","2026-09-21","2026-09-22","2026-09-23","2026-09-24","2026-09-28","2026-09-29","2026-09-30","2026-10-08","2026-10-09","2026-10-12","2026-10-13","2026-10-14","2026-10-15","2026-10-16"],"closes":[8473.0,8587.0,8626.0,8618.0,8527.0,8533.0,8559.0,8573.0,8605.0,8664.0,8581.0,8487.0,8562.0,8551.0,8544.0,8514.0,8435.0,8475.0,8588.0,8636.0,8537.0,8505.0,8440.0,8415.0,8442.0,8538.0,8553.0,8596.0,8558.0,8590.0,8499.0,8440.0,8376.0,8318.0,8320.0,8361.0,8357.0,8328.0,8345.0,8384.0,8353.0,8363.0,8353.0,8393.0,8351.0,8441.0,8469.0,8447.0,8430.0,8425.0,8406.0,8510.0,8587.0,8616.0,8610.0,8543.0,8568.0,8608.0,8598.0,8570.0,8535.0,8599.0,8542.0,8442.0,8545.0,8620.0,8471.0,8419.0,8412.0,8407.0,8406.0,8388.0,8440.0,8424.0,8441.0,8443.0,8445.0,8468.0,8442.0,8485.0,8541.0,8561.0,8694.0,8747.0,8847.0,8824.0,8805.0,8764.0,8765.0,8828.0,8965.0,9045.0,9098.0,9113.0,9123.0,9165.0,9172.0,9189.0,9143.0,9064.0,9026.0,9005.0,8927.0,9036.0,8969.0,8875.0,8895.0,8945.0,8922.0,8962.0,8868.0,8875.0,8972.0,8906.0,9014.0,8968.0,8949.0,9026.0,8854.0,8844.0]},"ZN0":{"dates":["2026-04-20","2026-04-21","2026-04-22","2026-04-23","2026-04-24","2026-04-27","2026-04-28","2026-04-29","2026-04-30","2026-05-06","2026-05-07","2026-05-08","2026-05-11","2026-05-12","2026-05-13","2026-05-14","2026-05-15","2026-05-18","2026-05-19","2026-05-20","2026-05-21","2026-05-22","2026-05-25","2026-05-26","2026-05-27","2026-05-28","2026-05-29","2026-06-01","2026-06-02","2026-06-03","2026-06-04","2026-06-05","2026-06-08","2026-06-09","2026-06-10","2026-06-11","2026-06-12","2026-06-15","2026-06-16","2026-06-17","2026-06-18","2026-06-22","2026-06-23","2026-06-24","2026-06-25","2026-06-26","2026-06-29","2026-06-30","2026-07-01","2026-07-02","2026-07-03","2026-07-06","2026-07-07","2026-07-08","2026-07-09","2026-07-10","2026-07-13","2026-07-14","2026-07-15","2026-07-16","2026-07-17","2026-07-20","2026-07-21","2026-07-22","2026-07-23","2026-07-24","2026-07-27","2026-07-28","2026-07-29","2026-07-30","2026-07-31","2026-08-03","2026-08-04","2026-08-05","2026-08-06","2026-08-07","2026-08-10","2026-08-11","2026-08-12","2026-08-13","2026-08-14","2026-08-17","2026-08-18","2026-08-19","2026-08-20","2026-08-21","2026-08-24","2026-08-25","2026-08-26","2026-08-27","2026-08-28","2026-08-31","2026-09-01","2026-09-02","2026-09-03","2026-09-04","2026-09-07","2026-09-08","2026-09-09","2026-09-10","2026-09-11","2026-09-14","2026-09-15","2026-09-16","2026-09-17","2026-09-18","2026-09-21","2026-09-22","2026-09-23","2026-09-24","2026-09-28","2026-09-29","2026-09-30","2026-10-08","2026-10-09","2026-10-12","2026-10-13","2026-10-14","2026-10-15","2026-10-16"],"closes":[24205.0,24115.0,24250.0,24340.0,24225.0,24450.0,23840.0,23935.0,23645.0,24250.0,24285.0,24275.0,24085.0,24380.0,24830.0,24880.0,24690.0,24670.0,24705.0,24790.0,24805.0,24865.0,24875.0,25110.0,24710.0,24665.0,24965.0,24720.0,24985.0,25150.0,24800.0,24780.0,24630.0,24760.0,24620.0,24165.0,24360.0,24875.0,24765.0,24740.0,24820.0,24770.0,24570.0,24330.0,23945.0,23945.0,24470.0,24350.0,24400.0,24130.0,24295.0,24515.0,24740.0,24665.0,24795.0,24865.0,24700.0,24840.0,24805.0,24700.0,24465.0,24365.0,24515.0,24565.0,24910.0,24785.0,24885.0,24780.0,24765.0,24700.0,24890.0,25380.0,25075.0,25425.0,25585.0,25945.0,25615.0,25665.0,25830.0,25590.0,25695.0,25865.0,25705.0,25325.0,25350.0,25710.0,25905.0,26070.0,26240.0,26140.0,26485.0,26710.0,27070.0,26585.0,26610.0,26745.0,27095.0,27505.0,27735.0,27475.0,26805.0,26335.0,26145.0,26300.0,26280.0,26565.0,26710.0,26580.0,26515.0,26760.0,26500.0,26575.0,26435.0,26060.0,25930.0,26115.0,25730.0,25665.0,25425.0,25440.0]},"lh0":{"dates":["2026-04-20","2026-04-21","2026-04-22","2026-04-23","2026-04-24","2026-04-27","2026-04-28","2026-04-29","2026-04-30","2026-05-06","2026-05-07","2026-05-08","2026-05-11","2026-05-12","2026-05-13","2026-05-14","2026-05-15","2026-05-18","2026-05-19","2026-05-20","2026-05-21","2026-05-22","2026-05-25","2026-05-26","2026-05-27","2026-05-28","2026-05-29","2026-06-01","2026-06-02","2026-06-03","2026-06-04","2026-06-05","2026-06-08","2026-06-09","2026-06-10","2026-06-11","2026-06-12","2026-06-15","2026-06-16","2026-06-17","2026-06-18","2026-06-22","2026-06-23","2026-06-24","2026-06-25","2026-06-26","2026-06-29","2026-06-30","2026-07-01","2026-07-02","2026-07-03","2026-07-06","2026-07-07","2026-07-08","2026-07-09","2026-07-10","2026-07-13","2026-07-14","2026-07-15","2026-07-16","2026-07-17","2026-07-20","2026-07-21","2026-07-22","2026-07-23","2026-07-24","2026-07-27","2026-07-28","2026-07-29","2026-07-30","2026-07-31","2026-08-03","2026-08-04","2026-08-05","2026-08-06","2026-08-07","2026-08-10","2026-08-11","2026-08-12","2026-08-13","2026-08-14","2026-08-17","2026-08-18","2026-08-19","2026-08-20","2026-08-21","2026-08-24","2026-08-25","2026-08-26","2026-08-27","2026-08-28","2026-08-31","2026-09-01","2026-09-02","2026-09-03","2026-09-04","2026-09-07","2026-09-08","2026-09-09","2026-09-10","2026-09-11","2026-09-14","2026-09-15","2026-09-16","2026-09-17","2026-09-18","2026-09-21","2026-09-22","2026-09-23","2026-09-24","2026-09-28","2026-09-29","2026-09-30","2026-10-08","2026-10-09","2026-10-12","2026-10-13","2026-10-14","2026-10-15","2026-10-16"],"closes":[11275.0,11115.0,11410.0,11460.0,11405.0,11215.0,11365.0,11260.0,11350.0,11365.0,11380.0,11215.0,11235.0,10815.0,10865.0,10765.0,10790.0,10730.0,10795.0,10820.0,11020.0,11190.0,11000.0,10775.0,10655.0,10730.0,12075.0,12065.0,11935.0,12150.0,11965.0,11780.0,11750.0,11910.0,11950.0,11820.0,12140.0,12145.0,12020.0,11770.0,11650.0,11760.0,11740.0,11910.0,11780.0,11935.0,12415.0,12295.0,12270.0,12255.0,12315.0,12340.0,12285.0,12245.0,12215.0,12450.0,12015.0,12050.0,11960.0,11915.0,11765.0,11475.0,11425.0,11275.0,11330.0,11065.0,11175.0,10965.0,10935.0,10775.0,10680.0,11600.0,11820.0,11910.0,12085.0,12035.0,12170.0,12130.0,12035.0,12305.0,12315.0,12400.0,12505.0,12315.0,12315.0,12250.0,12030.0,11835.0,11845.0,11860.0,12055.0,11955.0,11685.0,11740.0,11835.0,11765.0,11795.0,11845.0,11730.0,11570.0,11415.0,11475.0,11235.0,11130.0,11230.0,11060.0,10940.0,10935.0,10820.0,10655.0,10295.0,10560.0,10680.0,11105.0,11210.0,10885.0,10605.0,10425.0,10455.0,10490.0]}},"pair_z":{"CU0-SN0":{"z":[2.524,2.128,1.947,2.319,2.794,2.677,2.218,2.581,2.416,1.834,1.726,1.147,1.266,1.416,1.198,1.123,1.013,0.666,0.425,0.789,0.675,0.365,0.117,0.282,0.166,0.151,0.226,0.156,-0.309,-0.38,0.403,0.176,-0.24,0.259,1.021,0.93,0.698,0.012,0.451,0.12,-0.157,0.186,-0.19,-0.91,-1.451,-0.603,-1.133,0.243,0.884,1.809,2.21,2.578,2.86,2.995,3.176,1.584,1.464,1.354,0.39,-0.367,-2.148,-3.716,-2.577,-1.432,-1.981,-3.049,-2.616,-3.349,-2.844,-3.703,-3.089,-1.543,-1.223,-1.801,0.32,0.045,0.33,0.535,-0.461,-0.422,-0.91,-0.688,0.232,-0.461,-1.818,-1.752,-3.078,-2.619,-0.815,-1.224,-0.921,-1.012,-0.747,-0.835,-0.927,-0.995,-0.207,-0.328,-0.521,-0.453,-0.318,-0.04,0.011,-0.586,-0.396,-0.257,-0.807,-1.294,-1.26,-1.148,-0.702,-0.859,-0.645,-0.993,-0.597,-0.704,-0.227,-0.359,-0.417,-0.366,-0.441,-0.371,-0.616,-0.569,-0.338,-0.289,-0.386,-0.132,-0.505,-0.624,-1.582,-1.768,-1.541,-1.385,-0.954,-0.862,-0.972,-0.651,-0.818,-0.722,-1.262,-1.015,-1.228,-1.044,-1.389,-1.197,-1.337,-1.265,-1.674,-1.952,-1.803,-1.418,-0.846,-0.182,-0.495,-0.152,-0.52,-0.5,-1.088,-1.165,-0.985,-0.736,-1.093,-0.376,-0.184,-0.284,-0.274,-0.134,-0.261,-0.297,-0.476,-0.643,-1.052,-0.99,-1.133,-1.268,-1.085,-0.966,-0.994,-0.758,-0.749,-0.585,-0.889,-0.709,-0.552,-0.618,-0.691,-0.967,-0.554,-0.844,-0.836,-1.045,-0.916,-0.889,-0.923,-0.778,-0.676,-0.493,-0.269,-0.511,-0.491,-0.496,-0.233,-0.362,-0.37,-0.566,-0.609,-0.437,-0.315,-0.103,0.059,0.004,0.289,0.104,0.304,0.248,0.327,0.373,0.677,0.814,0.743,0.664,0.968,1.012,0.913,0.943,0.939,1.003,1.216,0.935,0.794,0.82,0.783,0.826,1.482,1.8,1.647,1.734,2.656,2.322,2.334],"dates":["2025-10-20","2025-10-21","2025-10-22","2025-10-23","2025-10-24","2025-10-27","2025-10-28","2025-10-29","2025-10-30","2025-10-31","2025-11-03","2025-11-04","2025-11-05","2025-11-06","2025-11-07","2025-11-10","2025-11-11","2025-11-12","2025-11-13","2025-11-14","2025-11-17","2025-11-18","2025-11-19","2025-11-20","2025-11-21","2025-11-24","2025-11-25","2025-11-26","2025-11-27","2025-11-28","2025-12-01","2025-12-02","2025-12-03","2025-12-04","2025-12-05","2025-12-08","2025-12-09","2025-12-10","2025-12-11","2025-12-12","2025-12-15","2025-12-16","2025-12-17","2025-12-18","2025-12-19","2025-12-22","2025-12-23","2025-12-24","2025-12-25","2025-12-26","2025-12-29","2025-12-30","2025-12-31","2026-01-05","2026-01-06","2026-01-07","2026-01-08","2026-01-09","2026-01-12","2026-01-13","2026-01-14","2026-01-15","2026-01-16","2026-01-19","2026-01-20","2026-01-21","2026-01-22","2026-01-23","2026-01-26","2026-01-27","2026-01-28","2026-01-29","2026-01-30","2026-02-02","2026-02-03","2026-02-04","2026-02-05","2026-02-06","2026-02-09","2026-02-10","2026-02-11","2026-02-12","2026-02-13","2026-02-24","2026-02-25","2026-02-26","2026-02-27","2026-03-02","2026-03-03","2026-03-04","2026-03-05","2026-03-06","2026-03-09","2026-03-10","2026-03-11","2026-03-12","2026-03-13","2026-03-16","2026-03-17","2026-03-18","2026-03-19","2026-03-20","2026-03-23","2026-03-24","2026-03-25","2026-03-26","2026-03-27","2026-03-30","2026-03-31","2026-04-01","2026-04-02","2026-04-03","2026-04-07","2026-04-08","2026-04-09","2026-04-10","2026-04-13","2026-04-14","2026-04-15","2026-04-16","2026-04-17","2026-04-20","2026-04-21","2026-04-22","2026-04-23","2026-04-24","2026-04-27","2026-04-28","2026-04-29","2026-04-30","2026-05-06","2026-05-07","2026-05-08","2026-05-11","2026-05-12","2026-05-13","2026-05-14","2026-05-15","2026-05-18","2026-05-19","2026-05-20","2026-05-21","2026-05-22","2026-05-25","2026-05-26","2026-05-27","2026-05-28","2026-05-29","2026-06-01","2026-06-02","2026-06-03","2026-06-04","2026-06-05","2026-06-08","2026-06-09","2026-06-10","2026-06-11","2026-06-12","2026-06-15","2026-06-16","2026-06-17","2026-06-18","2026-06-22","2026-06-23","2026-06-24","2026-06-25","2026-06-26","2026-06-29","2026-06-30","2026-07-01","2026-07-02","2026-07-03","2026-07-06","2026-07-07","2026-07-08","2026-07-09","2026-07-10","2026-07-13","2026-07-14","2026-07-15","2026-07-16","2026-07-17","2026-07-20","2026-07-21","2026-07-22","2026-07-23","2026-07-24","2026-07-27","2026-07-28","2026-07-29","2026-07-30","2026-07-31","2026-08-03","2026-08-04","2026-08-05","2026-08-06","2026-08-07","2026-08-10","2026-08-11","2026-08-12","2026-08-13","2026-08-14","2026-08-17","2026-08-18","2026-08-19","2026-08-20","2026-08-21","2026-08-24","2026-08-25","2026-08-26","2026-08-27","2026-08-28","2026-08-31","2026-09-01","2026-09-02","2026-09-03","2026-09-04","2026-09-07","2026-09-08","2026-09-09","2026-09-10","2026-09-11","2026-09-14","2026-09-15","2026-09-16","2026-09-17","2026-09-18","2026-09-21","2026-09-22","2026-09-23","2026-09-24","2026-09-28","2026-09-29","2026-09-30","2026-10-08","2026-10-09","2026-10-12","2026-10-13","2026-10-14","2026-10-15","2026-10-16"],"beta":0.712,"half_life":5.7},"AL0-SN0":{"z":[-1.04,-1.181,-0.861,0.002,-0.314,-0.092,-0.555,-0.497,0.017,0.29,1.694,1.347,1.559,2.515,2.162,1.929,1.175,1.364,0.983,1.333,0.929,-0.342,-0.8,-0.674,-1.473,-1.703,-1.595,-1.743,-2.749,-2.632,-1.61,-1.439,-2.263,-2.324,-0.957,-1.472,-2.567,-3.376,-2.969,-3.733,-3.607,-2.904,-3.459,-3.738,-3.689,-3.14,-3.332,-2.618,-2.162,-2.035,-1.283,-0.557,0.588,1.192,1.578,0.758,0.121,1.232,-0.162,-0.939,-2.901,-4.313,-3.239,-1.927,-2.687,-3.312,-2.857,-3.348,-3.114,-3.929,-1.683,-1.823,-1.552,-2.883,-1.305,-1.503,-0.98,-0.658,-1.678,-1.471,-1.86,-1.734,-1.075,-1.453,-2.586,-2.424,-3.756,-2.569,-1.331,-0.518,-0.113,-0.225,0.457,0.022,0.404,0.412,0.939,1.083,0.788,0.784,1.144,1.095,1.202,0.308,0.377,0.381,0.039,0.636,0.935,0.349,1.07,0.767,0.829,0.311,0.447,0.361,0.685,0.349,0.057,0.798,0.683,0.194,-0.179,-0.061,-0.011,-0.026,-0.201,-0.167,-0.326,-0.519,-1.344,-2.019,-2.088,-1.859,-1.863,-1.81,-1.764,-1.417,-1.54,-1.273,-1.529,-1.533,-1.704,-1.76,-1.752,-1.629,-1.852,-1.978,-2.111,-2.186,-2.346,-2.009,-1.571,-1.061,-1.398,-1.251,-1.16,-1.321,-1.936,-2.158,-2.115,-1.683,-1.753,-1.651,-1.566,-1.825,-1.718,-1.821,-2.489,-2.433,-2.49,-2.283,-2.473,-2.344,-2.248,-2.379,-2.334,-2.229,-2.057,-1.982,-1.959,-1.723,-2.141,-2.141,-2.054,-1.938,-1.892,-2.115,-1.79,-1.743,-1.539,-1.768,-1.774,-1.674,-1.807,-1.683,-1.571,-1.261,-1.065,-1.233,-1.233,-1.448,-1.431,-1.322,-1.398,-1.62,-1.579,-1.478,-1.417,-1.395,-1.174,-1.199,-0.926,-1.01,-0.723,-0.574,-0.646,-0.596,-0.559,-0.455,-0.71,-0.494,-0.312,-0.095,-0.185,-0.24,-0.252,-0.446,-0.463,-0.504,-0.554,-0.648,-0.62,-0.772,-0.855,-0.544,-0.707,-0.824,-0.262,-0.351,-0.246],"dates":["2025-10-20","2025-10-21","2025-10-22","2025-10-23","2025-10-24","2025-10-27","2025-10-28","2025-10-29","2025-10-30","2025-10-31","2025-11-03","2025-11-04","2025-11-05","2025-11-06","2025-11-07","2025-11-10","2025-11-11","2025-11-12","2025-11-13","2025-11-14","2025-11-17","2025-11-18","2025-11-19","2025-11-20","2025-11-21","2025-11-24","2025-11-25","2025-11-26","2025-11-27","2025-11-28","2025-12-01","2025-12-02","2025-12-03","2025-12-04","2025-12-05","2025-12-08","2025-12-09","2025-12-10","2025-12-11","2025-12-12","2025-12-15","2025-12-16","2025-12-17","2025-12-18","2025-12-19","2025-12-22","2025-12-23","2025-12-24","2025-12-25","2025-12-26","2025-12-29","2025-12-30","2025-12-31","2026-01-05","2026-01-06","2026-01-07","2026-01-08","2026-01-09","2026-01-12","2026-01-13","2026-01-14","2026-01-15","2026-01-16","2026-01-19","2026-01-20","2026-01-21","2026-01-22","2026-01-23","2026-01-26","2026-01-27","2026-01-28","2026-01-29","2026-01-30","2026-02-02","2026-02-03","2026-02-04","2026-02-05","2026-02-06","2026-02-09","2026-02-10","2026-02-11","2026-02-12","2026-02-13","2026-02-24","2026-02-25","2026-02-26","2026-02-27","2026-03-02","2026-03-03","2026-03-04","2026-03-05","2026-03-06","2026-03-09","2026-03-10","2026-03-11","2026-03-12","2026-03-13","2026-03-16","2026-03-17","2026-03-18","2026-03-19","2026-03-20","2026-03-23","2026-03-24","2026-03-25","2026-03-26","2026-03-27","2026-03-30","2026-03-31","2026-04-01","2026-04-02","2026-04-03","2026-04-07","2026-04-08","2026-04-09","2026-04-10","2026-04-13","2026-04-14","2026-04-15","2026-04-16","2026-04-17","2026-04-20","2026-04-21","2026-04-22","2026-04-23","2026-04-24","2026-04-27","2026-04-28","2026-04-29","2026-04-30","2026-05-06","2026-05-07","2026-05-08","2026-05-11","2026-05-12","2026-05-13","2026-05-14","2026-05-15","2026-05-18","2026-05-19","2026-05-20","2026-05-21","2026-05-22","2026-05-25","2026-05-26","2026-05-27","2026-05-28","2026-05-29","2026-06-01","2026-06-02","2026-06-03","2026-06-04","2026-06-05","2026-06-08","2026-06-09","2026-06-10","2026-06-11","2026-06-12","2026-06-15","2026-06-16","2026-06-17","2026-06-18","2026-06-22","2026-06-23","2026-06-24","2026-06-25","2026-06-26","2026-06-29","2026-06-30","2026-07-01","2026-07-02","2026-07-03","2026-07-06","2026-07-07","2026-07-08","2026-07-09","2026-07-10","2026-07-13","2026-07-14","2026-07-15","2026-07-16","2026-07-17","2026-07-20","2026-07-21","2026-07-22","2026-07-23","2026-07-24","2026-07-27","2026-07-28","2026-07-29","2026-07-30","2026-07-31","2026-08-03","2026-08-04","2026-08-05","2026-08-06","2026-08-07","2026-08-10","2026-08-11","2026-08-12","2026-08-13","2026-08-14","2026-08-17","2026-08-18","2026-08-19","2026-08-20","2026-08-21","2026-08-24","2026-08-25","2026-08-26","2026-08-27","2026-08-28","2026-08-31","2026-09-01","2026-09-02","2026-09-03","2026-09-04","2026-09-07","2026-09-08","2026-09-09","2026-09-10","2026-09-11","2026-09-14","2026-09-15","2026-09-16","2026-09-17","2026-09-18","2026-09-21","2026-09-22","2026-09-23","2026-09-24","2026-09-28","2026-09-29","2026-09-30","2026-10-08","2026-10-09","2026-10-12","2026-10-13","2026-10-14","2026-10-15","2026-10-16"],"beta":0.5553,"half_life":5.2},"SS0-JM0":{"z":[-2.203,-1.143,-1.465,-1.958,-1.541,-1.707,-1.612,-2.194,-2.229,-2.372,-2.337,-2.154,-2.292,-2.196,-2.015,-1.767,-1.408,-1.569,-1.509,-1.533,-1.596,-1.123,-0.967,-0.794,-0.633,-0.389,-0.006,0.186,0.215,0.113,0.031,0.053,0.416,-0.024,-0.422,0.256,0.782,1.163,1.477,1.516,0.554,-0.114,0.183,-0.584,0.745,1.109,1.129,1.603,1.401,1.378,1.58,1.725,1.863,2.113,3.119,3.575,2.245,2.602,2.094,2.342,2.548,3.61,3.277,3.158,3.499,3.915,3.554,3.317,3.034,3.044,2.705,2.603,1.946,0.891,1.138,1.25,1.413,1.395,1.456,1.596,2.018,1.751,1.56,1.987,2.027,2.236,2.09,2.261,1.786,1.975,1.763,1.763,1.352,1.754,1.59,1.615,1.341,1.223,1.208,1.206,0.965,1.171,0.516,1.043,1.333,1.252,1.298,1.288,1.358,1.557,1.348,1.598,1.522,1.628,1.824,2.128,2.121,2.215,2.262,1.438,1.822,1.453,1.314,1.316,1.426,1.714,1.758,1.81,1.951,1.771,1.989,1.844,1.406,1.351,1.577,1.662,1.366,1.349,1.255,1.234,1.369,1.367,1.436,1.019,1.046,1.09,1.014,1.002,0.611,0.887,0.768,0.247,0.038,0.206,0.303,0.159,0.208,0.561,0.816,1.059,1.046,1.357,1.319,1.143,0.948,0.953,0.857,0.808,0.832,0.774,0.705,0.641,0.81,0.889,0.448,0.395,0.423,0.47,0.702,0.594,0.884,0.797,0.777,0.891,0.905,0.889,0.805,0.779,0.707,0.714,0.822,1.11,0.917,1.223,0.674,0.546,0.719,0.633,0.232,-0.282,-0.43,-0.902,-0.745,-0.774,-0.996,-0.969,-1.046,-1.039,-1.165,-0.991,-1.35,-1.419,-1.875,-1.825,-1.782,-1.657,-1.682,-1.503,-1.756,-1.708,-1.634,-1.664,-1.711,-1.664,-1.769,-1.58,-1.149,-1.234,-1.192,-1.032,-1.077,-0.896,-0.868,-0.992,-1.353,-1.461,-1.608,-1.648,-1.518,-1.723,-1.598],"dates":["2025-10-20","2025-10-21","2025-10-22","2025-10-23","2025-10-24","2025-10-27","2025-10-28","2025-10-29","2025-10-30","2025-10-31","2025-11-03","2025-11-04","2025-11-05","2025-11-06","2025-11-07","2025-11-10","2025-11-11","2025-11-12","2025-11-13","2025-11-14","2025-11-17","2025-11-18","2025-11-19","2025-11-20","2025-11-21","2025-11-24","2025-11-25","2025-11-26","2025-11-27","2025-11-28","2025-12-01","2025-12-02","2025-12-03","2025-12-04","2025-12-05","2025-12-08","2025-12-09","2025-12-10","2025-12-11","2025-12-12","2025-12-15","2025-12-16","2025-12-17","2025-12-18","2025-12-19","2025-12-22","2025-12-23","2025-12-24","2025-12-25","2025-12-26","2025-12-29","2025-12-30","2025-12-31","2026-01-05","2026-01-06","2026-01-07","2026-01-08","2026-01-09","2026-01-12","2026-01-13","2026-01-14","2026-01-15","2026-01-16","2026-01-19","2026-01-20","2026-01-21","2026-01-22","2026-01-23","2026-01-26","2026-01-27","2026-01-28","2026-01-29","2026-01-30","2026-02-02","2026-02-03","2026-02-04","2026-02-05","2026-02-06","2026-02-09","2026-02-10","2026-02-11","2026-02-12","2026-02-13","2026-02-24","2026-02-25","2026-02-26","2026-02-27","2026-03-02","2026-03-03","2026-03-04","2026-03-05","2026-03-06","2026-03-09","2026-03-10","2026-03-11","2026-03-12","2026-03-13","2026-03-16","2026-03-17","2026-03-18","2026-03-19","2026-03-20","2026-03-23","2026-03-24","2026-03-25","2026-03-26","2026-03-27","2026-03-30","2026-03-31","2026-04-01","2026-04-02","2026-04-03","2026-04-07","2026-04-08","2026-04-09","2026-04-10","2026-04-13","2026-04-14","2026-04-15","2026-04-16","2026-04-17","2026-04-20","2026-04-21","2026-04-22","2026-04-23","2026-04-24","2026-04-27","2026-04-28","2026-04-29","2026-04-30","2026-05-06","2026-05-07","2026-05-08","2026-05-11","2026-05-12","2026-05-13","2026-05-14","2026-05-15","2026-05-18","2026-05-19","2026-05-20","2026-05-21","2026-05-22","2026-05-25","2026-05-26","2026-05-27","2026-05-28","2026-05-29","2026-06-01","2026-06-02","2026-06-03","2026-06-04","2026-06-05","2026-06-08","2026-06-09","2026-06-10","2026-06-11","2026-06-12","2026-06-15","2026-06-16","2026-06-17","2026-06-18","2026-06-22","2026-06-23","2026-06-24","2026-06-25","2026-06-26","2026-06-29","2026-06-30","2026-07-01","2026-07-02","2026-07-03","2026-07-06","2026-07-07","2026-07-08","2026-07-09","2026-07-10","2026-07-13","2026-07-14","2026-07-15","2026-07-16","2026-07-17","2026-07-20","2026-07-21","2026-07-22","2026-07-23","2026-07-24","2026-07-27","2026-07-28","2026-07-29","2026-07-30","2026-07-31","2026-08-03","2026-08-04","2026-08-05","2026-08-06","2026-08-07","2026-08-10","2026-08-11","2026-08-12","2026-08-13","2026-08-14","2026-08-17","2026-08-18","2026-08-19","2026-08-20","2026-08-21","2026-08-24","2026-08-25","2026-08-26","2026-08-27","2026-08-28","2026-08-31","2026-09-01","2026-09-02","2026-09-03","2026-09-04","2026-09-07","2026-09-08","2026-09-09","2026-09-10","2026-09-11","2026-09-14","2026-09-15","2026-09-16","2026-09-17","2026-09-18","2026-09-21","2026-09-22","2026-09-23","2026-09-24","2026-09-28","2026-09-29","2026-09-30","2026-10-08","2026-10-09","2026-10-12","2026-10-13","2026-10-14","2026-10-15","2026-10-16"],"beta":0.3452,"half_life":29.2},"SS0-SF0":{"z":[0.191,0.323,0.097,0.156,0.687,0.537,0.122,0.231,0.071,0.026,-0.354,-0.78,-1.245,-0.946,-0.706,-0.944,-0.703,-0.946,-1.133,-1.608,-1.944,-1.491,-1.557,-1.713,-1.84,-1.4,-0.884,-0.313,-0.387,-0.67,-0.762,-0.486,-0.467,-1.501,-0.445,-0.139,0.386,0.988,0.793,-0.019,-0.954,-1.68,-1.765,-1.83,-0.315,0.458,0.761,1.71,0.912,0.845,0.535,1.059,1.83,1.859,3.08,4.732,3.945,4.52,3.846,3.468,3.678,5.046,4.379,4.188,3.973,4.425,3.839,3.644,3.378,3.109,2.801,2.669,2.042,0.844,1.318,1.67,1.575,1.377,1.575,1.562,2.075,1.926,1.736,2.117,2.286,2.158,1.637,1.778,1.441,1.407,1.223,1.276,1.107,1.263,1.222,1.241,1.157,1.075,0.92,1.064,0.75,0.851,0.435,0.858,1.172,1.221,1.154,1.012,1.069,1.195,0.912,1.245,1.336,1.466,1.587,1.838,1.882,1.961,2.151,2.122,2.481,2.153,2.025,1.998,1.946,2.358,2.374,2.423,2.517,2.379,2.665,2.327,1.969,2.116,1.926,1.922,1.639,1.636,1.372,1.303,1.394,1.249,1.249,0.947,1.284,1.279,1.326,1.382,1.252,1.479,1.316,0.986,0.985,0.966,0.791,0.704,0.827,1.237,1.516,1.773,1.804,1.799,1.829,1.572,1.394,1.329,1.3,1.378,1.285,1.199,1.043,0.947,1.109,1.087,0.71,0.654,0.589,0.624,0.824,0.82,1.032,0.983,1.015,1.14,1.026,1.117,0.929,0.833,0.765,0.64,0.849,0.931,0.766,1.0,0.585,0.402,0.754,0.72,0.577,0.555,0.422,0.061,0.248,0.227,0.168,0.193,-0.014,0.045,-0.16,0.152,-0.275,-0.356,-0.643,-0.857,-0.783,-1.02,-1.369,-0.852,-1.056,-0.897,-0.876,-0.888,-0.876,-0.826,-0.907,-0.839,-0.663,-0.583,-0.568,-0.449,-0.515,-0.505,-0.426,-0.641,-1.018,-0.955,-1.029,-1.061,-0.94,-1.288,-1.045],"dates":["2025-10-20","2025-10-21","2025-10-22","2025-10-23","2025-10-24","2025-10-27","2025-10-28","2025-10-29","2025-10-30","2025-10-31","2025-11-03","2025-11-04","2025-11-05","2025-11-06","2025-11-07","2025-11-10","2025-11-11","2025-11-12","2025-11-13","2025-11-14","2025-11-17","2025-11-18","2025-11-19","2025-11-20","2025-11-21","2025-11-24","2025-11-25","2025-11-26","2025-11-27","2025-11-28","2025-12-01","2025-12-02","2025-12-03","2025-12-04","2025-12-05","2025-12-08","2025-12-09","2025-12-10","2025-12-11","2025-12-12","2025-12-15","2025-12-16","2025-12-17","2025-12-18","2025-12-19","2025-12-22","2025-12-23","2025-12-24","2025-12-25","2025-12-26","2025-12-29","2025-12-30","2025-12-31","2026-01-05","2026-01-06","2026-01-07","2026-01-08","2026-01-09","2026-01-12","2026-01-13","2026-01-14","2026-01-15","2026-01-16","2026-01-19","2026-01-20","2026-01-21","2026-01-22","2026-01-23","2026-01-26","2026-01-27","2026-01-28","2026-01-29","2026-01-30","2026-02-02","2026-02-03","2026-02-04","2026-02-05","2026-02-06","2026-02-09","2026-02-10","2026-02-11","2026-02-12","2026-02-13","2026-02-24","2026-02-25","2026-02-26","2026-02-27","2026-03-02","2026-03-03","2026-03-04","2026-03-05","2026-03-06","2026-03-09","2026-03-10","2026-03-11","2026-03-12","2026-03-13","2026-03-16","2026-03-17","2026-03-18","2026-03-19","2026-03-20","2026-03-23","2026-03-24","2026-03-25","2026-03-26","2026-03-27","2026-03-30","2026-03-31","2026-04-01","2026-04-02","2026-04-03","2026-04-07","2026-04-08","2026-04-09","2026-04-10","2026-04-13","2026-04-14","2026-04-15","2026-04-16","2026-04-17","2026-04-20","2026-04-21","2026-04-22","2026-04-23","2026-04-24","2026-04-27","2026-04-28","2026-04-29","2026-04-30","2026-05-06","2026-05-07","2026-05-08","2026-05-11","2026-05-12","2026-05-13","2026-05-14","2026-05-15","2026-05-18","2026-05-19","2026-05-20","2026-05-21","2026-05-22","2026-05-25","2026-05-26","2026-05-27","2026-05-28","2026-05-29","2026-06-01","2026-06-02","2026-06-03","2026-06-04","2026-06-05","2026-06-08","2026-06-09","2026-06-10","2026-06-11","2026-06-12","2026-06-15","2026-06-16","2026-06-17","2026-06-18","2026-06-22","2026-06-23","2026-06-24","2026-06-25","2026-06-26","2026-06-29","2026-06-30","2026-07-01","2026-07-02","2026-07-03","2026-07-06","2026-07-07","2026-07-08","2026-07-09","2026-07-10","2026-07-13","2026-07-14","2026-07-15","2026-07-16","2026-07-17","2026-07-20","2026-07-21","2026-07-22","2026-07-23","2026-07-24","2026-07-27","2026-07-28","2026-07-29","2026-07-30","2026-07-31","2026-08-03","2026-08-04","2026-08-05","2026-08-06","2026-08-07","2026-08-10","2026-08-11","2026-08-12","2026-08-13","2026-08-14","2026-08-17","2026-08-18","2026-08-19","2026-08-20","2026-08-21","2026-08-24","2026-08-25","2026-08-26","2026-08-27","2026-08-28","2026-08-31","2026-09-01","2026-09-02","2026-09-03","2026-09-04","2026-09-07","2026-09-08","2026-09-09","2026-09-10","2026-09-11","2026-09-14","2026-09-15","2026-09-16","2026-09-17","2026-09-18","2026-09-21","2026-09-22","2026-09-23","2026-09-24","2026-09-28","2026-09-29","2026-09-30","2026-10-08","2026-10-09","2026-10-12","2026-10-13","2026-10-14","2026-10-15","2026-10-16"],"beta":0.5494,"half_life":21.6},"SS0-LC0":{"z":[-2.069,-1.563,-1.408,-1.436,-1.069,-1.348,-1.673,-1.467,-1.956,-1.959,-2.206,-2.131,-2.17,-1.863,-2.201,-2.419,-2.651,-2.672,-2.685,-2.883,-3.143,-3.01,-3.268,-3.187,-2.548,-2.277,-2.264,-2.094,-2.131,-2.219,-1.959,-1.836,-1.65,-1.725,-1.415,-1.5,-1.1,-1.089,-1.345,-1.426,-1.775,-2.119,-2.245,-1.989,-1.434,-1.219,-1.294,-1.035,-1.181,-1.484,-1.169,-0.838,-0.75,-1.147,-0.41,0.615,-0.248,0.217,-0.167,-0.612,-0.168,0.88,1.056,1.08,0.778,1.405,1.189,1.017,1.24,0.653,0.828,1.117,0.615,-0.525,-0.406,0.181,0.564,0.236,0.294,0.247,0.57,0.194,-0.159,0.029,0.33,0.18,-0.022,0.453,0.648,0.647,0.327,0.538,0.145,0.37,0.582,0.684,0.608,0.209,0.28,0.262,0.107,0.575,0.329,0.817,1.094,0.91,0.571,0.431,0.351,0.355,0.142,0.487,0.234,0.638,0.777,1.068,0.959,1.193,1.505,1.331,1.88,1.427,1.303,1.392,1.409,2.018,2.211,2.278,2.49,2.128,2.547,2.196,1.248,1.157,1.042,1.333,0.977,0.874,0.475,0.742,1.034,0.932,0.664,0.837,0.974,1.255,1.1,1.02,0.994,1.584,1.649,1.143,0.828,0.969,0.487,0.254,0.153,0.908,1.261,1.808,1.737,2.042,1.966,1.515,0.968,1.249,1.167,1.344,1.02,0.726,0.654,0.528,0.979,1.079,0.529,0.551,0.377,0.293,0.894,0.909,1.296,1.166,1.406,1.711,1.607,1.697,1.533,1.275,1.019,0.947,1.176,1.424,1.043,1.732,0.908,0.751,1.38,1.087,0.916,0.824,0.45,-0.193,0.19,0.254,0.241,0.283,-0.099,-0.07,-0.108,0.133,-0.305,-0.519,-0.81,-0.862,-0.905,-0.64,-0.367,-0.289,-0.443,-0.536,-0.428,-0.712,-0.727,-0.554,-0.497,-0.549,-0.201,-0.305,-0.318,0.061,0.157,0.344,0.344,0.121,-0.369,-0.149,0.054,-0.004,0.3,-0.265,-0.067],"dates":["2025-10-20","2025-10-21","2025-10-22","2025-10-23","2025-10-24","2025-10-27","2025-10-28","2025-10-29","2025-10-30","2025-10-31","2025-11-03","2025-11-04","2025-11-05","2025-11-06","2025-11-07","2025-11-10","2025-11-11","2025-11-12","2025-11-13","2025-11-14","2025-11-17","2025-11-18","2025-11-19","2025-11-20","2025-11-21","2025-11-24","2025-11-25","2025-11-26","2025-11-27","2025-11-28","2025-12-01","2025-12-02","2025-12-03","2025-12-04","2025-12-05","2025-12-08","2025-12-09","2025-12-10","2025-12-11","2025-12-12","2025-12-15","2025-12-16","2025-12-17","2025-12-18","2025-12-19","2025-12-22","2025-12-23","2025-12-24","2025-12-25","2025-12-26","2025-12-29","2025-12-30","2025-12-31","2026-01-05","2026-01-06","2026-01-07","2026-01-08","2026-01-09","2026-01-12","2026-01-13","2026-01-14","2026-01-15","2026-01-16","2026-01-19","2026-01-20","2026-01-21","2026-01-22","2026-01-23","2026-01-26","2026-01-27","2026-01-28","2026-01-29","2026-01-30","2026-02-02","2026-02-03","2026-02-04","2026-02-05","2026-02-06","2026-02-09","2026-02-10","2026-02-11","2026-02-12","2026-02-13","2026-02-24","2026-02-25","2026-02-26","2026-02-27","2026-03-02","2026-03-03","2026-03-04","2026-03-05","2026-03-06","2026-03-09","2026-03-10","2026-03-11","2026-03-12","2026-03-13","2026-03-16","2026-03-17","2026-03-18","2026-03-19","2026-03-20","2026-03-23","2026-03-24","2026-03-25","2026-03-26","2026-03-27","2026-03-30","2026-03-31","2026-04-01","2026-04-02","2026-04-03","2026-04-07","2026-04-08","2026-04-09","2026-04-10","2026-04-13","2026-04-14","2026-04-15","2026-04-16","2026-04-17","2026-04-20","2026-04-21","2026-04-22","2026-04-23","2026-04-24","2026-04-27","2026-04-28","2026-04-29","2026-04-30","2026-05-06","2026-05-07","2026-05-08","2026-05-11","2026-05-12","2026-05-13","2026-05-14","2026-05-15","2026-05-18","2026-05-19","2026-05-20","2026-05-21","2026-05-22","2026-05-25","2026-05-26","2026-05-27","2026-05-28","2026-05-29","2026-06-01","2026-06-02","2026-06-03","2026-06-04","2026-06-05","2026-06-08","2026-06-09","2026-06-10","2026-06-11","2026-06-12","2026-06-15","2026-06-16","2026-06-17","2026-06-18","2026-06-22","2026-06-23","2026-06-24","2026-06-25","2026-06-26","2026-06-29","2026-06-30","2026-07-01","2026-07-02","2026-07-03","2026-07-06","2026-07-07","2026-07-08","2026-07-09","2026-07-10","2026-07-13","2026-07-14","2026-07-15","2026-07-16","2026-07-17","2026-07-20","2026-07-21","2026-07-22","2026-07-23","2026-07-24","2026-07-27","2026-07-28","2026-07-29","2026-07-30","2026-07-31","2026-08-03","2026-08-04","2026-08-05","2026-08-06","2026-08-07","2026-08-10","2026-08-11","2026-08-12","2026-08-13","2026-08-14","2026-08-17","2026-08-18","2026-08-19","2026-08-20","2026-08-21","2026-08-24","2026-08-25","2026-08-26","2026-08-27","2026-08-28","2026-08-31","2026-09-01","2026-09-02","2026-09-03","2026-09-04","2026-09-07","2026-09-08","2026-09-09","2026-09-10","2026-09-11","2026-09-14","2026-09-15","2026-09-16","2026-09-17","2026-09-18","2026-09-21","2026-09-22","2026-09-23","2026-09-24","2026-09-28","2026-09-29","2026-09-30","2026-10-08","2026-10-09","2026-10-12","2026-10-13","2026-10-14","2026-10-15","2026-10-16"],"beta":0.1419,"half_life":19.9},"RB0-HC0":{"z":[0.986,0.911,0.705,0.515,-0.113,0.113,-0.368,-0.245,-0.28,0.04,-0.447,-0.658,-0.944,-0.585,-0.319,-0.202,-0.532,-0.507,-0.186,-0.004,-0.01,0.288,-0.121,-0.499,-0.345,-0.048,0.082,0.001,0.17,0.477,0.47,1.897,1.784,1.683,1.435,1.212,0.981,1.283,1.081,0.956,1.407,1.19,1.314,1.631,1.663,1.607,1.517,1.628,1.467,1.056,1.312,1.582,1.549,1.638,1.368,1.619,1.461,1.394,1.512,1.517,1.528,1.417,1.254,1.016,0.803,0.682,0.866,0.875,0.99,0.848,1.022,1.22,0.916,0.794,0.698,0.765,0.814,0.416,0.37,0.577,0.387,0.571,0.605,0.543,0.841,0.983,1.201,1.065,1.283,1.395,1.602,1.344,1.077,1.027,0.967,0.934,1.007,0.816,0.635,0.472,0.558,0.328,0.295,0.193,0.117,0.237,0.295,0.497,0.352,-0.125,-0.172,0.74,0.761,0.5,0.287,0.289,0.16,-0.074,-0.129,-0.287,-0.222,-0.144,-0.139,-0.511,-0.579,-0.469,-0.564,-0.516,-0.811,-0.75,-1.244,-0.914,-0.641,-0.641,-0.835,-1.08,-1.045,-0.787,-1.105,-1.134,-1.308,-1.001,-0.942,-0.773,-1.063,-1.028,-1.054,-1.158,-1.092,-0.954,-0.901,-1.011,-0.866,-0.873,-0.514,-0.319,-0.414,-0.352,-0.633,-0.753,-0.868,-0.965,-0.736,-0.887,-0.852,-0.868,-1.172,-1.196,-1.3,-1.026,-0.955,-0.992,-0.972,-0.907,-0.494,-0.6,-0.503,-1.024,-0.763,-0.724,-0.621,-0.523,-0.408,-0.409,-0.322,-0.558,-0.809,-0.905,-1.101,-1.195,-1.338,-0.999,-1.211,-1.085,-1.03,-1.156,-1.607,-1.716,-1.322,-1.356,-1.428,-1.868,-2.181,-2.24,-2.574,-2.189,-2.055,-2.537,-2.433,-2.22,-1.825,-1.937,-0.464,-0.506,-0.84,-0.939,-0.567,-0.53,-0.661,-0.614,-0.738,-0.724,-0.673,-0.13,-0.045,0.015,0.012,0.132,0.32,0.214,0.478,0.592,0.752,1.053,0.355,0.576,0.919,0.914,0.927,0.686,0.785],"dates":["2025-10-20","2025-10-21","2025-10-22","2025-10-23","2025-10-24","2025-10-27","2025-10-28","2025-10-29","2025-10-30","2025-10-31","2025-11-03","2025-11-04","2025-11-05","2025-11-06","2025-11-07","2025-11-10","2025-11-11","2025-11-12","2025-11-13","2025-11-14","2025-11-17","2025-11-18","2025-11-19","2025-11-20","2025-11-21","2025-11-24","2025-11-25","2025-11-26","2025-11-27","2025-11-28","2025-12-01","2025-12-02","2025-12-03","2025-12-04","2025-12-05","2025-12-08","2025-12-09","2025-12-10","2025-12-11","2025-12-12","2025-12-15","2025-12-16","2025-12-17","2025-12-18","2025-12-19","2025-12-22","2025-12-23","2025-12-24","2025-12-25","2025-12-26","2025-12-29","2025-12-30","2025-12-31","2026-01-05","2026-01-06","2026-01-07","2026-01-08","2026-01-09","2026-01-12","2026-01-13","2026-01-14","2026-01-15","2026-01-16","2026-01-19","2026-01-20","2026-01-21","2026-01-22","2026-01-23","2026-01-26","2026-01-27","2026-01-28","2026-01-29","2026-01-30","2026-02-02","2026-02-03","2026-02-04","2026-02-05","2026-02-06","2026-02-09","2026-02-10","2026-02-11","2026-02-12","2026-02-13","2026-02-24","2026-02-25","2026-02-26","2026-02-27","2026-03-02","2026-03-03","2026-03-04","2026-03-05","2026-03-06","2026-03-09","2026-03-10","2026-03-11","2026-03-12","2026-03-13","2026-03-16","2026-03-17","2026-03-18","2026-03-19","2026-03-20","2026-03-23","2026-03-24","2026-03-25","2026-03-26","2026-03-27","2026-03-30","2026-03-31","2026-04-01","2026-04-02","2026-04-03","2026-04-07","2026-04-08","2026-04-09","2026-04-10","2026-04-13","2026-04-14","2026-04-15","2026-04-16","2026-04-17","2026-04-20","2026-04-21","2026-04-22","2026-04-23","2026-04-24","2026-04-27","2026-04-28","2026-04-29","2026-04-30","2026-05-06","2026-05-07","2026-05-08","2026-05-11","2026-05-12","2026-05-13","2026-05-14","2026-05-15","2026-05-18","2026-05-19","2026-05-20","2026-05-21","2026-05-22","2026-05-25","2026-05-26","2026-05-27","2026-05-28","2026-05-29","2026-06-01","2026-06-02","2026-06-03","2026-06-04","2026-06-05","2026-06-08","2026-06-09","2026-06-10","2026-06-11","2026-06-12","2026-06-15","2026-06-16","2026-06-17","2026-06-18","2026-06-22","2026-06-23","2026-06-24","2026-06-25","2026-06-26","2026-06-29","2026-06-30","2026-07-01","2026-07-02","2026-07-03","2026-07-06","2026-07-07","2026-07-08","2026-07-09","2026-07-10","2026-07-13","2026-07-14","2026-07-15","2026-07-16","2026-07-17","2026-07-20","2026-07-21","2026-07-22","2026-07-23","2026-07-24","2026-07-27","2026-07-28","2026-07-29","2026-07-30","2026-07-31","2026-08-03","2026-08-04","2026-08-05","2026-08-06","2026-08-07","2026-08-10","2026-08-11","2026-08-12","2026-08-13","2026-08-14","2026-08-17","2026-08-18","2026-08-19","2026-08-20","2026-08-21","2026-08-24","2026-08-25","2026-08-26","2026-08-27","2026-08-28","2026-08-31","2026-09-01","2026-09-02","2026-09-03","2026-09-04","2026-09-07","2026-09-08","2026-09-09","2026-09-10","2026-09-11","2026-09-14","2026-09-15","2026-09-16","2026-09-17","2026-09-18","2026-09-21","2026-09-22","2026-09-23","2026-09-24","2026-09-28","2026-09-29","2026-09-30","2026-10-08","2026-10-09","2026-10-12","2026-10-13","2026-10-14","2026-10-15","2026-10-16"],"beta":1.0236,"half_life":25.1},"RB0-SI0":{"z":[-2.343,-2.048,-1.602,-2.067,-2.076,-1.262,-1.356,-1.135,-1.497,-1.349,-1.806,-1.759,-2.255,-2.069,-2.311,-2.207,-2.182,-1.966,-1.725,-1.388,-0.915,-0.82,-1.743,-1.437,-1.134,-0.687,-0.504,-0.691,-0.922,-0.726,-0.445,0.29,0.386,0.476,0.435,0.237,0.297,0.965,0.369,-0.066,0.199,0.262,0.095,0.304,0.136,0.413,0.08,0.034,-0.04,-0.25,0.238,-0.099,-0.158,-0.152,-0.389,0.515,1.136,0.43,0.64,0.781,0.589,0.608,0.902,0.083,-0.13,-0.114,-0.105,0.166,-0.015,-0.149,0.015,0.17,-0.101,-0.432,-0.457,-0.364,0.027,-0.108,-0.196,-0.213,-0.17,-0.152,-0.21,-0.684,0.045,0.059,-0.017,0.146,0.539,-0.235,-0.285,-0.361,0.179,0.042,0.229,0.251,0.532,0.475,0.89,1.192,1.318,0.714,0.923,0.705,0.114,0.13,0.32,0.903,0.907,0.959,0.787,1.111,1.02,0.949,0.7,0.77,0.381,0.197,0.2,0.537,0.404,0.897,1.039,1.147,1.107,1.354,1.281,0.943,1.02,1.27,1.743,1.519,1.486,1.625,1.835,2.022,2.099,2.122,1.788,1.728,1.467,1.291,1.178,1.623,0.548,0.538,0.474,0.681,0.613,0.777,0.465,0.368,0.523,0.488,0.798,0.558,0.243,0.614,0.918,0.751,0.577,0.292,0.275,0.118,0.125,0.034,0.166,0.056,0.014,-0.303,-0.194,-0.348,-0.255,-0.224,0.673,0.175,-0.108,-0.664,-0.199,0.367,0.342,0.571,0.43,0.4,0.261,0.183,0.032,0.053,0.038,0.122,-0.723,-0.878,-1.761,-1.55,-1.574,-1.288,-1.676,-1.92,-1.701,-1.773,-1.856,-2.052,-1.829,-1.732,-2.047,-1.617,-1.567,-0.972,-0.987,-0.896,-0.759,-0.31,0.889,0.694,0.5,0.298,0.49,0.535,0.527,0.432,0.343,0.05,0.016,0.472,0.747,0.666,0.321,0.562,0.461,0.247,0.389,0.334,0.173,0.204,-0.502,-0.519,-0.466,-0.481,-0.686,-0.299,-1.259],"dates":["2025-10-20","2025-10-21","2025-10-22","2025-10-23","2025-10-24","2025-10-27","2025-10-28","2025-10-29","2025-10-30","2025-10-31","2025-11-03","2025-11-04","2025-11-05","2025-11-06","2025-11-07","2025-11-10","2025-11-11","2025-11-12","2025-11-13","2025-11-14","2025-11-17","2025-11-18","2025-11-19","2025-11-20","2025-11-21","2025-11-24","2025-11-25","2025-11-26","2025-11-27","2025-11-28","2025-12-01","2025-12-02","2025-12-03","2025-12-04","2025-12-05","2025-12-08","2025-12-09","2025-12-10","2025-12-11","2025-12-12","2025-12-15","2025-12-16","2025-12-17","2025-12-18","2025-12-19","2025-12-22","2025-12-23","2025-12-24","2025-12-25","2025-12-26","2025-12-29","2025-12-30","2025-12-31","2026-01-05","2026-01-06","2026-01-07","2026-01-08","2026-01-09","2026-01-12","2026-01-13","2026-01-14","2026-01-15","2026-01-16","2026-01-19","2026-01-20","2026-01-21","2026-01-22","2026-01-23","2026-01-26","2026-01-27","2026-01-28","2026-01-29","2026-01-30","2026-02-02","2026-02-03","2026-02-04","2026-02-05","2026-02-06","2026-02-09","2026-02-10","2026-02-11","2026-02-12","2026-02-13","2026-02-24","2026-02-25","2026-02-26","2026-02-27","2026-03-02","2026-03-03","2026-03-04","2026-03-05","2026-03-06","2026-03-09","2026-03-10","2026-03-11","2026-03-12","2026-03-13","2026-03-16","2026-03-17","2026-03-18","2026-03-19","2026-03-20","2026-03-23","2026-03-24","2026-03-25","2026-03-26","2026-03-27","2026-03-30","2026-03-31","2026-04-01","2026-04-02","2026-04-03","2026-04-07","2026-04-08","2026-04-09","2026-04-10","2026-04-13","2026-04-14","2026-04-15","2026-04-16","2026-04-17","2026-04-20","2026-04-21","2026-04-22","2026-04-23","2026-04-24","2026-04-27","2026-04-28","2026-04-29","2026-04-30","2026-05-06","2026-05-07","2026-05-08","2026-05-11","2026-05-12","2026-05-13","2026-05-14","2026-05-15","2026-05-18","2026-05-19","2026-05-20","2026-05-21","2026-05-22","2026-05-25","2026-05-26","2026-05-27","2026-05-28","2026-05-29","2026-06-01","2026-06-02","2026-06-03","2026-06-04","2026-06-05","2026-06-08","2026-06-09","2026-06-10","2026-06-11","2026-06-12","2026-06-15","2026-06-16","2026-06-17","2026-06-18","2026-06-22","2026-06-23","2026-06-24","2026-06-25","2026-06-26","2026-06-29","2026-06-30","2026-07-01","2026-07-02","2026-07-03","2026-07-06","2026-07-07","2026-07-08","2026-07-09","2026-07-10","2026-07-13","2026-07-14","2026-07-15","2026-07-16","2026-07-17","2026-07-20","2026-07-21","2026-07-22","2026-07-23","2026-07-24","2026-07-27","2026-07-28","2026-07-29","2026-07-30","2026-07-31","2026-08-03","2026-08-04","2026-08-05","2026-08-06","2026-08-07","2026-08-10","2026-08-11","2026-08-12","2026-08-13","2026-08-14","2026-08-17","2026-08-18","2026-08-19","2026-08-20","2026-08-21","2026-08-24","2026-08-25","2026-08-26","2026-08-27","2026-08-28","2026-08-31","2026-09-01","2026-09-02","2026-09-03","2026-09-04","2026-09-07","2026-09-08","2026-09-09","2026-09-10","2026-09-11","2026-09-14","2026-09-15","2026-09-16","2026-09-17","2026-09-18","2026-09-21","2026-09-22","2026-09-23","2026-09-24","2026-09-28","2026-09-29","2026-09-30","2026-10-08","2026-10-09","2026-10-12","2026-10-13","2026-10-14","2026-10-15","2026-10-16"],"beta":0.3993,"half_life":11.2},"HC0-SI0":{"z":[-2.504,-2.199,-1.706,-1.966,-1.742,-1.123,-1.007,-0.827,-1.149,-1.17,-1.387,-1.326,-1.679,-1.669,-2.002,-1.956,-1.853,-1.67,-1.569,-1.328,-0.853,-0.882,-1.58,-1.21,-0.987,-0.65,-0.509,-0.657,-0.926,-0.832,-0.55,-0.344,-0.232,-0.118,-0.096,-0.241,-0.163,0.372,-0.153,-0.509,-0.424,-0.279,-0.474,-0.359,-0.538,-0.267,-0.532,-0.612,-0.631,-0.664,-0.324,-0.732,-0.792,-0.855,-0.941,-0.158,0.425,-0.206,-0.048,0.06,-0.116,-0.057,0.279,-0.375,-0.51,-0.433,-0.498,-0.237,-0.45,-0.53,-0.47,-0.377,-0.52,-0.799,-0.774,-0.706,-0.4,-0.37,-0.445,-0.574,-0.444,-0.52,-0.578,-1.005,-0.431,-0.506,-0.669,-0.465,-0.218,-0.949,-1.086,-1.009,-0.37,-0.488,-0.282,-0.241,-0.001,0.038,0.497,0.827,0.89,0.459,0.707,0.554,0.055,0.004,0.135,0.57,0.616,0.89,0.74,0.615,0.512,0.575,0.43,0.497,0.219,0.16,0.204,0.627,0.478,0.938,1.067,1.352,1.338,1.515,1.49,1.147,1.38,1.593,2.294,1.952,1.775,1.921,2.129,2.384,2.415,2.279,2.085,2.035,1.859,1.559,1.426,1.794,0.915,0.889,0.847,1.081,1.023,1.104,0.808,0.757,0.835,0.797,0.9,0.657,0.402,0.713,1.09,0.975,0.86,0.632,0.517,0.43,0.42,0.333,0.561,0.486,0.486,0.082,0.141,0.025,0.109,0.102,0.702,0.333,0.055,-0.228,0.096,0.581,0.517,0.658,0.469,0.443,0.275,0.314,0.284,0.346,0.39,0.504,-0.199,-0.486,-1.164,-1.035,-1.07,-0.741,-0.878,-1.047,-1.004,-1.06,-1.111,-1.063,-0.73,-0.604,-0.719,-0.499,-0.502,0.31,0.275,0.268,0.213,0.711,1.167,0.979,0.918,0.784,0.811,0.812,0.908,0.786,0.728,0.392,0.315,0.483,0.716,0.608,0.255,0.45,0.262,0.12,0.128,0.004,-0.221,-0.327,-0.716,-0.804,-0.905,-0.916,-1.133,-0.67,-1.574],"dates":["2025-10-20","2025-10-21","2025-10-22","2025-10-23","2025-10-24","2025-10-27","2025-10-28","2025-10-29","2025-10-30","2025-10-31","2025-11-03","2025-11-04","2025-11-05","2025-11-06","2025-11-07","2025-11-10","2025-11-11","2025-11-12","2025-11-13","2025-11-14","2025-11-17","2025-11-18","2025-11-19","2025-11-20","2025-11-21","2025-11-24","2025-11-25","2025-11-26","2025-11-27","2025-11-28","2025-12-01","2025-12-02","2025-12-03","2025-12-04","2025-12-05","2025-12-08","2025-12-09","2025-12-10","2025-12-11","2025-12-12","2025-12-15","2025-12-16","2025-12-17","2025-12-18","2025-12-19","2025-12-22","2025-12-23","2025-12-24","2025-12-25","2025-12-26","2025-12-29","2025-12-30","2025-12-31","2026-01-05","2026-01-06","2026-01-07","2026-01-08","2026-01-09","2026-01-12","2026-01-13","2026-01-14","2026-01-15","2026-01-16","2026-01-19","2026-01-20","2026-01-21","2026-01-22","2026-01-23","2026-01-26","2026-01-27","2026-01-28","2026-01-29","2026-01-30","2026-02-02","2026-02-03","2026-02-04","2026-02-05","2026-02-06","2026-02-09","2026-02-10","2026-02-11","2026-02-12","2026-02-13","2026-02-24","2026-02-25","2026-02-26","2026-02-27","2026-03-02","2026-03-03","2026-03-04","2026-03-05","2026-03-06","2026-03-09","2026-03-10","2026-03-11","2026-03-12","2026-03-13","2026-03-16","2026-03-17","2026-03-18","2026-03-19","2026-03-20","2026-03-23","2026-03-24","2026-03-25","2026-03-26","2026-03-27","2026-03-30","2026-03-31","2026-04-01","2026-04-02","2026-04-03","2026-04-07","2026-04-08","2026-04-09","2026-04-10","2026-04-13","2026-04-14","2026-04-15","2026-04-16","2026-04-17","2026-04-20","2026-04-21","2026-04-22","2026-04-23","2026-04-24","2026-04-27","2026-04-28","2026-04-29","2026-04-30","2026-05-06","2026-05-07","2026-05-08","2026-05-11","2026-05-12","2026-05-13","2026-05-14","2026-05-15","2026-05-18","2026-05-19","2026-05-20","2026-05-21","2026-05-22","2026-05-25","2026-05-26","2026-05-27","2026-05-28","2026-05-29","2026-06-01","2026-06-02","2026-06-03","2026-06-04","2026-06-05","2026-06-08","2026-06-09","2026-06-10","2026-06-11","2026-06-12","2026-06-15","2026-06-16","2026-06-17","2026-06-18","2026-06-22","2026-06-23","2026-06-24","2026-06-25","2026-06-26","2026-06-29","2026-06-30","2026-07-01","2026-07-02","2026-07-03","2026-07-06","2026-07-07","2026-07-08","2026-07-09","2026-07-10","2026-07-13","2026-07-14","2026-07-15","2026-07-16","2026-07-17","2026-07-20","2026-07-21","2026-07-22","2026-07-23","2026-07-24","2026-07-27","2026-07-28","2026-07-29","2026-07-30","2026-07-31","2026-08-03","2026-08-04","2026-08-05","2026-08-06","2026-08-07","2026-08-10","2026-08-11","2026-08-12","2026-08-13","2026-08-14","2026-08-17","2026-08-18","2026-08-19","2026-08-20","2026-08-21","2026-08-24","2026-08-25","2026-08-26","2026-08-27","2026-08-28","2026-08-31","2026-09-01","2026-09-02","2026-09-03","2026-09-04","2026-09-07","2026-09-08","2026-09-09","2026-09-10","2026-09-11","2026-09-14","2026-09-15","2026-09-16","2026-09-17","2026-09-18","2026-09-21","2026-09-22","2026-09-23","2026-09-24","2026-09-28","2026-09-29","2026-09-30","2026-10-08","2026-10-09","2026-10-12","2026-10-13","2026-10-14","2026-10-15","2026-10-16"],"beta":0.3498,"half_life":14.3},"I0-SI0":{"z":[-2.28,-1.853,-1.39,-1.536,-1.763,-0.489,0.046,0.695,0.545,0.421,-1.171,-1.317,-1.478,-1.395,-2.948,-2.543,-2.417,-1.55,-1.555,-1.345,-0.238,0.169,-0.47,-0.228,-0.279,0.131,0.364,0.496,0.536,0.09,0.602,0.822,0.824,-0.916,-1.367,-1.799,-1.463,-0.399,-1.302,-1.274,-1.767,-1.148,-0.768,-0.313,-0.191,0.076,-0.451,-0.496,-0.532,-0.25,1.055,0.153,0.279,1.065,1.089,2.886,2.417,2.188,2.599,2.492,2.351,1.827,1.901,0.388,0.225,-0.193,-0.086,0.493,-0.349,-0.034,-0.235,0.59,0.217,-0.292,-0.702,-0.468,-1.027,-1.43,-1.272,-1.15,-1.063,-1.038,-2.235,-2.581,-1.74,-1.853,-1.775,-1.389,-1.274,-1.786,-1.371,-0.678,0.161,0.189,0.421,0.898,1.848,1.658,2.247,2.123,2.0,2.211,2.219,2.417,1.2,1.822,1.654,1.865,1.719,1.952,1.577,-0.053,-0.108,-0.6,-1.545,-1.312,-0.919,-1.249,-0.992,0.005,-0.292,0.098,-0.004,0.116,-0.034,0.189,0.135,-0.242,0.054,0.524,1.502,1.366,1.286,1.614,1.414,1.906,1.792,1.575,1.248,0.985,1.051,0.483,0.622,0.519,-0.161,-0.119,-0.219,-0.039,-0.376,0.009,-0.446,-1.131,-1.195,-1.553,-1.308,-0.948,-1.353,-1.327,-0.792,-1.285,-2.103,-2.06,-2.446,-2.426,-2.066,-2.492,-1.625,-1.792,-1.686,-2.434,-1.965,-2.305,-2.091,-2.157,-1.373,-1.58,-1.349,-1.715,-0.922,-0.77,-0.908,-0.649,-0.801,-1.279,-1.747,-1.36,-1.431,-1.69,-1.553,-1.625,-2.879,-2.765,-3.788,-3.568,-3.215,-2.575,-2.761,-3.419,-3.103,-3.117,-3.055,-2.901,-2.945,-2.586,-2.699,-2.799,-2.751,-2.323,-2.419,-2.133,-2.259,-1.97,-1.855,-1.801,-2.144,-1.72,-1.742,-1.38,-1.13,-1.341,-1.513,-1.851,-2.118,-2.068,-1.985,-1.912,-1.692,-1.724,-1.962,-1.854,-1.766,-1.998,-2.217,-2.091,-2.701,-2.738,-2.702,-2.85,-2.877,-2.799,-2.953],"dates":["2025-10-20","2025-10-21","2025-10-22","2025-10-23","2025-10-24","2025-10-27","2025-10-28","2025-10-29","2025-10-30","2025-10-31","2025-11-03","2025-11-04","2025-11-05","2025-11-06","2025-11-07","2025-11-10","2025-11-11","2025-11-12","2025-11-13","2025-11-14","2025-11-17","2025-11-18","2025-11-19","2025-11-20","2025-11-21","2025-11-24","2025-11-25","2025-11-26","2025-11-27","2025-11-28","2025-12-01","2025-12-02","2025-12-03","2025-12-04","2025-12-05","2025-12-08","2025-12-09","2025-12-10","2025-12-11","2025-12-12","2025-12-15","2025-12-16","2025-12-17","2025-12-18","2025-12-19","2025-12-22","2025-12-23","2025-12-24","2025-12-25","2025-12-26","2025-12-29","2025-12-30","2025-12-31","2026-01-05","2026-01-06","2026-01-07","2026-01-08","2026-01-09","2026-01-12","2026-01-13","2026-01-14","2026-01-15","2026-01-16","2026-01-19","2026-01-20","2026-01-21","2026-01-22","2026-01-23","2026-01-26","2026-01-27","2026-01-28","2026-01-29","2026-01-30","2026-02-02","2026-02-03","2026-02-04","2026-02-05","2026-02-06","2026-02-09","2026-02-10","2026-02-11","2026-02-12","2026-02-13","2026-02-24","2026-02-25","2026-02-26","2026-02-27","2026-03-02","2026-03-03","2026-03-04","2026-03-05","2026-03-06","2026-03-09","2026-03-10","2026-03-11","2026-03-12","2026-03-13","2026-03-16","2026-03-17","2026-03-18","2026-03-19","2026-03-20","2026-03-23","2026-03-24","2026-03-25","2026-03-26","2026-03-27","2026-03-30","2026-03-31","2026-04-01","2026-04-02","2026-04-03","2026-04-07","2026-04-08","2026-04-09","2026-04-10","2026-04-13","2026-04-14","2026-04-15","2026-04-16","2026-04-17","2026-04-20","2026-04-21","2026-04-22","2026-04-23","2026-04-24","2026-04-27","2026-04-28","2026-04-29","2026-04-30","2026-05-06","2026-05-07","2026-05-08","2026-05-11","2026-05-12","2026-05-13","2026-05-14","2026-05-15","2026-05-18","2026-05-19","2026-05-20","2026-05-21","2026-05-22","2026-05-25","2026-05-26","2026-05-27","2026-05-28","2026-05-29","2026-06-01","2026-06-02","2026-06-03","2026-06-04","2026-06-05","2026-06-08","2026-06-09","2026-06-10","2026-06-11","2026-06-12","2026-06-15","2026-06-16","2026-06-17","2026-06-18","2026-06-22","2026-06-23","2026-06-24","2026-06-25","2026-06-26","2026-06-29","2026-06-30","2026-07-01","2026-07-02","2026-07-03","2026-07-06","2026-07-07","2026-07-08","2026-07-09","2026-07-10","2026-07-13","2026-07-14","2026-07-15","2026-07-16","2026-07-17","2026-07-20","2026-07-21","2026-07-22","2026-07-23","2026-07-24","2026-07-27","2026-07-28","2026-07-29","2026-07-30","2026-07-31","2026-08-03","2026-08-04","2026-08-05","2026-08-06","2026-08-07","2026-08-10","2026-08-11","2026-08-12","2026-08-13","2026-08-14","2026-08-17","2026-08-18","2026-08-19","2026-08-20","2026-08-21","2026-08-24","2026-08-25","2026-08-26","2026-08-27","2026-08-28","2026-08-31","2026-09-01","2026-09-02","2026-09-03","2026-09-04","2026-09-07","2026-09-08","2026-09-09","2026-09-10","2026-09-11","2026-09-14","2026-09-15","2026-09-16","2026-09-17","2026-09-18","2026-09-21","2026-09-22","2026-09-23","2026-09-24","2026-09-28","2026-09-29","2026-09-30","2026-10-08","2026-10-09","2026-10-12","2026-10-13","2026-10-14","2026-10-15","2026-10-16"],"beta":0.2301,"half_life":22.8},"J0-SI0":{"z":[0.461,-0.112,0.636,1.1,1.221,1.482,0.903,1.342,1.097,1.038,0.833,0.651,0.764,1.074,0.334,-0.074,-0.927,-0.865,-0.805,-0.818,-0.167,-1.11,-2.229,-1.565,-1.632,-1.212,-1.043,-1.617,-2.011,-2.559,-1.71,-1.144,-1.1,-0.588,-1.542,-2.091,-1.732,-1.265,-1.844,-2.426,-1.778,-1.585,0.702,1.563,1.404,1.623,1.198,1.103,1.036,0.655,0.371,0.505,0.271,-0.175,-0.411,1.262,2.002,1.363,1.587,1.437,1.091,1.224,1.045,0.627,0.096,0.182,0.162,0.692,0.456,-0.23,0.223,0.499,0.622,0.088,0.59,1.354,1.352,0.949,1.124,0.668,0.707,0.73,0.885,0.082,0.68,0.394,0.123,0.546,1.478,0.45,0.416,0.458,1.2,0.342,0.952,1.035,1.13,1.233,1.266,1.482,1.65,1.572,2.835,2.033,1.37,1.21,1.286,1.584,1.056,0.71,1.009,0.707,0.632,0.986,0.616,0.298,0.089,-0.038,0.558,0.707,0.371,2.158,2.369,2.375,2.252,2.257,2.383,1.868,1.882,1.913,2.142,1.608,1.293,1.632,1.341,1.636,1.856,1.9,1.494,1.606,1.574,1.255,0.937,2.524,2.171,2.455,2.6,2.598,3.229,3.088,3.119,3.49,3.392,3.182,2.765,2.544,2.773,3.28,3.4,3.295,3.156,2.73,2.673,1.974,2.14,2.053,2.242,2.415,2.238,1.85,1.854,2.048,2.086,1.999,2.327,2.025,1.675,1.303,1.258,1.407,1.276,1.392,1.26,1.226,1.153,1.267,1.211,1.297,1.204,1.37,1.172,0.754,0.452,0.535,0.717,0.954,1.081,1.014,1.285,1.251,1.144,1.091,1.161,1.842,2.041,2.181,2.413,2.638,2.502,2.248,2.342,2.431,2.808,2.607,2.578,2.241,2.292,2.123,2.285,2.102,2.051,1.748,1.758,1.796,1.838,1.712,1.214,1.35,1.316,1.146,1.193,1.107,0.991,1.045,1.057,1.305,1.265,1.345,1.14,1.131,0.752],"dates":["2025-10-20","2025-10-21","2025-10-22","2025-10-23","2025-10-24","2025-10-27","2025-10-28","2025-10-29","2025-10-30","2025-10-31","2025-11-03","2025-11-04","2025-11-05","2025-11-06","2025-11-07","2025-11-10","2025-11-11","2025-11-12","2025-11-13","2025-11-14","2025-11-17","2025-11-18","2025-11-19","2025-11-20","2025-11-21","2025-11-24","2025-11-25","2025-11-26","2025-11-27","2025-11-28","2025-12-01","2025-12-02","2025-12-03","2025-12-04","2025-12-05","2025-12-08","2025-12-09","2025-12-10","2025-12-11","2025-12-12","2025-12-15","2025-12-16","2025-12-17","2025-12-18","2025-12-19","2025-12-22","2025-12-23","2025-12-24","2025-12-25","2025-12-26","2025-12-29","2025-12-30","2025-12-31","2026-01-05","2026-01-06","2026-01-07","2026-01-08","2026-01-09","2026-01-12","2026-01-13","2026-01-14","2026-01-15","2026-01-16","2026-01-19","2026-01-20","2026-01-21","2026-01-22","2026-01-23","2026-01-26","2026-01-27","2026-01-28","2026-01-29","2026-01-30","2026-02-02","2026-02-03","2026-02-04","2026-02-05","2026-02-06","2026-02-09","2026-02-10","2026-02-11","2026-02-12","2026-02-13","2026-02-24","2026-02-25","2026-02-26","2026-02-27","2026-03-02","2026-03-03","2026-03-04","2026-03-05","2026-03-06","2026-03-09","2026-03-10","2026-03-11","2026-03-12","2026-03-13","2026-03-16","2026-03-17","2026-03-18","2026-03-19","2026-03-20","2026-03-23","2026-03-24","2026-03-25","2026-03-26","2026-03-27","2026-03-30","2026-03-31","2026-04-01","2026-04-02","2026-04-03","2026-04-07","2026-04-08","2026-04-09","2026-04-10","2026-04-13","2026-04-14","2026-04-15","2026-04-16","2026-04-17","2026-04-20","2026-04-21","2026-04-22","2026-04-23","2026-04-24","2026-04-27","2026-04-28","2026-04-29","2026-04-30","2026-05-06","2026-05-07","2026-05-08","2026-05-11","2026-05-12","2026-05-13","2026-05-14","2026-05-15","2026-05-18","2026-05-19","2026-05-20","2026-05-21","2026-05-22","2026-05-25","2026-05-26","2026-05-27","2026-05-28","2026-05-29","2026-06-01","2026-06-02","2026-06-03","2026-06-04","2026-06-05","2026-06-08","2026-06-09","2026-06-10","2026-06-11","2026-06-12","2026-06-15","2026-06-16","2026-06-17","2026-06-18","2026-06-22","2026-06-23","2026-06-24","2026-06-25","2026-06-26","2026-06-29","2026-06-30","2026-07-01","2026-07-02","2026-07-03","2026-07-06","2026-07-07","2026-07-08","2026-07-09","2026-07-10","2026-07-13","2026-07-14","2026-07-15","2026-07-16","2026-07-17","2026-07-20","2026-07-21","2026-07-22","2026-07-23","2026-07-24","2026-07-27","2026-07-28","2026-07-29","2026-07-30","2026-07-31","2026-08-03","2026-08-04","2026-08-05","2026-08-06","2026-08-07","2026-08-10","2026-08-11","2026-08-12","2026-08-13","2026-08-14","2026-08-17","2026-08-18","2026-08-19","2026-08-20","2026-08-21","2026-08-24","2026-08-25","2026-08-26","2026-08-27","2026-08-28","2026-08-31","2026-09-01","2026-09-02","2026-09-03","2026-09-04","2026-09-07","2026-09-08","2026-09-09","2026-09-10","2026-09-11","2026-09-14","2026-09-15","2026-09-16","2026-09-17","2026-09-18","2026-09-21","2026-09-22","2026-09-23","2026-09-24","2026-09-28","2026-09-29","2026-09-30","2026-10-08","2026-10-09","2026-10-12","2026-10-13","2026-10-14","2026-10-15","2026-10-16"],"beta":0.6662,"half_life":30.0},"SF0-SI0":{"z":[-1.762,-1.373,-0.943,-1.145,-1.08,-1.008,-0.976,-1.141,-1.355,-1.529,-1.407,-1.059,-0.974,-0.884,-1.467,-1.193,-1.57,-1.547,-1.348,-1.221,-0.869,-1.221,-1.884,-1.46,-1.116,-1.158,-1.218,-1.466,-1.72,-1.704,-1.287,-1.116,-1.032,-0.471,-0.694,-0.651,-0.01,-0.016,-0.071,-0.048,0.286,0.059,0.241,0.206,0.398,0.574,0.288,0.201,0.441,0.254,0.548,0.627,0.276,0.219,0.795,1.121,0.786,0.266,0.576,0.686,0.522,0.097,0.078,-0.47,-0.271,-0.307,-0.059,0.201,-0.109,-0.158,0.189,0.522,0.195,0.072,0.012,0.097,0.579,0.61,0.515,0.567,0.549,0.131,-0.037,-0.208,-0.142,0.38,1.448,1.795,2.126,1.702,1.648,1.635,1.651,1.755,1.786,1.928,1.662,1.537,2.037,1.607,1.897,2.153,2.861,2.641,2.271,1.771,2.062,2.502,1.738,1.512,1.911,1.546,1.092,1.25,0.868,0.839,0.658,0.712,0.617,0.575,0.358,0.478,0.368,0.528,0.787,0.584,0.852,0.599,0.674,0.591,0.554,0.671,0.084,-0.419,0.395,0.842,0.779,0.724,1.043,1.362,1.466,1.525,1.325,2.203,1.129,1.479,1.241,0.947,1.014,1.092,1.337,1.311,0.958,1.256,1.438,0.859,0.639,0.63,0.383,0.338,0.175,0.267,0.103,-0.008,-0.117,0.077,0.126,0.249,0.473,0.3,0.735,0.992,0.98,1.222,1.576,1.251,0.941,0.696,1.022,0.959,1.02,1.058,1.123,1.11,1.435,1.305,1.604,1.604,1.363,1.894,1.228,1.206,0.856,1.359,1.343,1.464,1.148,1.015,1.052,1.138,1.02,0.885,0.988,1.211,0.983,1.135,1.345,1.292,1.367,0.903,1.375,1.611,1.887,2.356,2.085,2.808,3.652,2.445,2.547,1.887,2.09,1.541,1.445,1.512,1.634,1.612,1.505,1.32,1.298,1.176,1.279,1.314,1.0,1.133,1.353,1.305,1.026,1.145,0.938,1.057,0.037],"dates":["2025-10-20","2025-10-21","2025-10-22","2025-10-23","2025-10-24","2025-10-27","2025-10-28","2025-10-29","2025-10-30","2025-10-31","2025-11-03","2025-11-04","2025-11-05","2025-11-06","2025-11-07","2025-11-10","2025-11-11","2025-11-12","2025-11-13","2025-11-14","2025-11-17","2025-11-18","2025-11-19","2025-11-20","2025-11-21","2025-11-24","2025-11-25","2025-11-26","2025-11-27","2025-11-28","2025-12-01","2025-12-02","2025-12-03","2025-12-04","2025-12-05","2025-12-08","2025-12-09","2025-12-10","2025-12-11","2025-12-12","2025-12-15","2025-12-16","2025-12-17","2025-12-18","2025-12-19","2025-12-22","2025-12-23","2025-12-24","2025-12-25","2025-12-26","2025-12-29","2025-12-30","2025-12-31","2026-01-05","2026-01-06","2026-01-07","2026-01-08","2026-01-09","2026-01-12","2026-01-13","2026-01-14","2026-01-15","2026-01-16","2026-01-19","2026-01-20","2026-01-21","2026-01-22","2026-01-23","2026-01-26","2026-01-27","2026-01-28","2026-01-29","2026-01-30","2026-02-02","2026-02-03","2026-02-04","2026-02-05","2026-02-06","2026-02-09","2026-02-10","2026-02-11","2026-02-12","2026-02-13","2026-02-24","2026-02-25","2026-02-26","2026-02-27","2026-03-02","2026-03-03","2026-03-04","2026-03-05","2026-03-06","2026-03-09","2026-03-10","2026-03-11","2026-03-12","2026-03-13","2026-03-16","2026-03-17","2026-03-18","2026-03-19","2026-03-20","2026-03-23","2026-03-24","2026-03-25","2026-03-26","2026-03-27","2026-03-30","2026-03-31","2026-04-01","2026-04-02","2026-04-03","2026-04-07","2026-04-08","2026-04-09","2026-04-10","2026-04-13","2026-04-14","2026-04-15","2026-04-16","2026-04-17","2026-04-20","2026-04-21","2026-04-22","2026-04-23","2026-04-24","2026-04-27","2026-04-28","2026-04-29","2026-04-30","2026-05-06","2026-05-07","2026-05-08","2026-05-11","2026-05-12","2026-05-13","2026-05-14","2026-05-15","2026-05-18","2026-05-19","2026-05-20","2026-05-21","2026-05-22","2026-05-25","2026-05-26","2026-05-27","2026-05-28","2026-05-29","2026-06-01","2026-06-02","2026-06-03","2026-06-04","2026-06-05","2026-06-08","2026-06-09","2026-06-10","2026-06-11","2026-06-12","2026-06-15","2026-06-16","2026-06-17","2026-06-18","2026-06-22","2026-06-23","2026-06-24","2026-06-25","2026-06-26","2026-06-29","2026-06-30","2026-07-01","2026-07-02","2026-07-03","2026-07-06","2026-07-07","2026-07-08","2026-07-09","2026-07-10","2026-07-13","2026-07-14","2026-07-15","2026-07-16","2026-07-17","2026-07-20","2026-07-21","2026-07-22","2026-07-23","2026-07-24","2026-07-27","2026-07-28","2026-07-29","2026-07-30","2026-07-31","2026-08-03","2026-08-04","2026-08-05","2026-08-06","2026-08-07","2026-08-10","2026-08-11","2026-08-12","2026-08-13","2026-08-14","2026-08-17","2026-08-18","2026-08-19","2026-08-20","2026-08-21","2026-08-24","2026-08-25","2026-08-26","2026-08-27","2026-08-28","2026-08-31","2026-09-01","2026-09-02","2026-09-03","2026-09-04","2026-09-07","2026-09-08","2026-09-09","2026-09-10","2026-09-11","2026-09-14","2026-09-15","2026-09-16","2026-09-17","2026-09-18","2026-09-21","2026-09-22","2026-09-23","2026-09-24","2026-09-28","2026-09-29","2026-09-30","2026-10-08","2026-10-09","2026-10-12","2026-10-13","2026-10-14","2026-10-15","2026-10-16"],"beta":0.4565,"half_life":16.0}}};
+
+/* ================= helpers & indexes ================= */
+function $(id){ return document.getElementById(id); }
+function fmt(n){
+  return n.toLocaleString('en-US',{minimumFractionDigits:0, maximumFractionDigits:(Math.abs(n)<100?2:0)});
+}
+function pct(x){ return (x>0?'+':'') + x.toFixed(2) + '%'; }
+function sgn(x,d){ return (x>0?'+':'') + x.toFixed(d==null?3:d); }
+function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;'); }
+
+var Q = {};            /* symbol -> quote */
+DATA.quotes.forEach(function(q){ Q[q.symbol]=q; });
+var ALERT = DATA.monitor_alerts[0];
+var ALERT_SYMS = ALERT.pair.split('-');
+
+/* unified pair index */
+var PAIRS = {};
+function pairOf(key){
+  if(!PAIRS[key]){
+    var legs = key.split('-');
+    PAIRS[key] = { key:key, a:legs[0], b:legs[1],
+      an:(Q[legs[0]]||{}).name||legs[0], bn:(Q[legs[1]]||{}).name||legs[1],
+      base:null, coint:null, tail:null, pz:(DATA.pair_z||{})[key]||null, alert:null };
+  }
+  return PAIRS[key];
+}
+DATA.baselines.forEach(function(b){ pairOf(b.pair).base=b; });
+DATA.coints.forEach(function(c){ pairOf(c.pair).coint=c; });
+DATA.tails.forEach(function(t){ pairOf(t.pair).tail=t; });
+DATA.monitor_alerts.forEach(function(a){ pairOf(a.pair).alert=a; });
+function pairsOf(sym){
+  return Object.keys(PAIRS).map(function(k){ return PAIRS[k]; })
+    .filter(function(p){ return p.a===sym || p.b===sym; });
+}
+function relCounts(sym){
+  var ps = pairsOf(sym), c={corr:0,coint:0,tail:0,alert:0};
+  ps.forEach(function(p){
+    if(p.base) c.corr++; if(p.coint) c.coint++; if(p.tail) c.tail++; if(p.alert) c.alert++;
+  });
+  return c;
+}
+function curZ(p){ return p.pz ? p.pz.z[p.pz.z.length-1] : null; }
+
+/* sector groups per spec chips */
+var SECTOR_GROUPS = [
+  {label:'全部', test:function(){ return true; }},
+  {label:'有色', test:function(s){ return s==='有色'; }},
+  {label:'黑色', test:function(s){ return s==='黑色'; }},
+  {label:'农产', test:function(s){ return ['粮食','油粕','软商品','畜牧'].indexOf(s)>=0; }},
+  {label:'贵金属', test:function(s){ return s==='贵金属'; }},
+  {label:'合金', test:function(s){ return s==='合金'||s==='硅铁'; }},
+  {label:'电池材料', test:function(s){ return s==='电池材料'; }}
+];
+
+/* ================= global state ================= */
+var state = {
+  sector:'全部', sort:'def', query:'',
+  focus:null,          /* {syms:[...], label:'...'} */
+  tab:'coint'
+};
+
+/* ================= SVG chart engine ================= */
+/* Interactive single-series chart with MA overlays + crosshair.
+   cfg: {w,h, series:[{data,color,width,dash}], yMin,yMax, dates, fmtY, fmtTip} */
+function lineChart(el, cfg){
+  var W=cfg.w||500, H=cfg.h||220, PL=8, PR=52, PT=10, PB=20;
+  var iw=W-PL-PR, ih=H-PT-PB;
+  var all=[]; cfg.series.forEach(function(s){ all=all.concat(s.data); });
+  var lo=cfg.yMin!=null?cfg.yMin:Math.min.apply(null,all);
+  var hi=cfg.yMax!=null?cfg.yMax:Math.max.apply(null,all);
+  if(hi-lo<1e-9){ hi=lo+1; }
+  var pad=(hi-lo)*0.06; lo-=pad; hi+=pad;
+  var n=cfg.series[0].data.length;
+  function X(i){ return PL + iw*(n<=1?0:i/(n-1)); }
+  function Y(v){ return PT + ih*(hi-v)/(hi-lo); }
+  var s='';
+  /* y gridlines: 3 ticks */
+  for(var g=0; g<=2; g++){
+    var v=lo+(hi-lo)*(g/2), y=Y(v);
+    s+='<line x1="'+PL+'" y1="'+y.toFixed(1)+'" x2="'+(W-PR)+'" y2="'+y.toFixed(1)+'" stroke="var(--line)" stroke-width="1"/>';
+    s+='<text x="'+(W-PR+6)+'" y="'+(y+4).toFixed(1)+'" font-size="11" fill="var(--faint)">'+esc(cfg.fmtY?cfg.fmtY(v):v.toFixed(0))+'</text>';
+  }
+  /* x labels: first / mid / last date */
+  [[0,'start'],[Math.floor(n/2),'middle'],[n-1,'end']].forEach(function(p){
+    s+='<text x="'+X(p[0]).toFixed(1)+'" y="'+(H-4)+'" text-anchor="'+p[1]+'" font-size="11" fill="var(--faint)">'+cfg.dates[p[0]].slice(0,7)+'</text>';
+  });
+  cfg.series.forEach(function(sr){
+    var pts=sr.data.map(function(v,i){ return X(i).toFixed(1)+','+Y(v).toFixed(1); }).join(' ');
+    s+='<polyline points="'+pts+'" fill="none" stroke="'+sr.color+'" stroke-width="'+(sr.width||1.8)+'"'+(sr.dash?' stroke-dasharray="'+sr.dash+'"':'')+' stroke-linejoin="round"/>';
+  });
+  s+='<g class="xh" style="display:none"><line class="xhl" y1="'+PT+'" y2="'+(PT+ih)+'" stroke="var(--faint)" stroke-width="1" stroke-dasharray="3 3"/>';
+  cfg.series.forEach(function(sr,i){ s+='<circle class="xhc'+i+'" r="3.5" fill="'+sr.color+'" stroke="var(--card)" stroke-width="1.5"/>'; });
+  s+='</g>';
+  el.innerHTML='<svg viewBox="0 0 '+W+' '+H+'" width="100%" style="display:block;touch-action:pan-y" role="img">'+s+'</svg>'+
+    '<div class="charttip"></div>';
+  var svg=el.querySelector('svg'), tip=el.querySelector('.charttip'), xh=el.querySelector('.xh');
+  var dots=cfg.series.map(function(_,i){ return el.querySelector('.xhc'+i); });
+  var line=el.querySelector('.xhl');
+  function show(i){
+    if(i==null||i<0||i>=n){ xh.style.display='none'; tip.style.opacity=0; if(cfg.onHover)cfg.onHover(null); return; }
+    xh.style.display='';
+    line.setAttribute('x1',X(i)); line.setAttribute('x2',X(i));
+    cfg.series.forEach(function(sr,k){ dots[k].setAttribute('cx',X(i)); dots[k].setAttribute('cy',Y(sr.data[i])); });
+    tip.innerHTML=esc(cfg.fmtTip(i));
+    tip.style.opacity=1;
+    var r=el.getBoundingClientRect();
+    var px=X(i)/W*r.width, py=Y(cfg.series[0].data[i])/H*r.height;
+    tip.style.left=Math.max(0,Math.min(px+10, r.width-tip.offsetWidth-2))+'px';
+    tip.style.top=Math.max(0,py-34)+'px';
+    if(cfg.onHover) cfg.onHover(cfg.dates[i], i);
+  }
+  function fromEvent(e){
+    var r=svg.getBoundingClientRect();
+    var cx=(e.touches?e.touches[0].clientX:e.clientX);
+    var fx=(cx-r.left)/r.width;
+    var i=Math.round((fx*W-PL)/iw*(n-1));
+    show(Math.max(0,Math.min(n-1,i)));
+  }
+  svg.addEventListener('mousemove',fromEvent);
+  svg.addEventListener('touchstart',fromEvent,{passive:true});
+  svg.addEventListener('touchmove',fromEvent,{passive:true});
+  svg.addEventListener('mouseleave',function(){ show(null); });
+  return { showAtDate:function(d){
+    var i=cfg.dates.indexOf(d); if(i>=0) show(i); else show(null);
+  }, clear:function(){ show(null); } };
+}
+
+/* Z-series chart (static or interactive). opts: {coneHL, h, interactive, onHover, syncDates} */
+function zChart(el, pz, opts){
+  opts=opts||{};
+  var z=pz.z, dates=pz.dates, n=z.length;
+  var horizon=opts.coneHL?44:0;
+  var W=560, H=opts.h||230, PL=30, PR=14, PT=12, PB=20;
+  var iw=W-PL-PR, ih=H-PT-PB, lo=-3.9, hi=3.9;
+  var total=n+horizon;
+  function X(i){ return PL + iw*i/(total-1); }
+  function Y(v){ return PT + ih*(hi-v)/(hi-lo); }
+  var s='';
+  [-2,-1.5,0,1.5,2].forEach(function(g){
+    var isT=Math.abs(g)===2, isM=Math.abs(g)===1.5;
+    var col=isT?'var(--up)':(isM?'var(--line2)':'var(--line2)');
+    s+='<line x1="'+PL+'" y1="'+Y(g)+'" x2="'+(W-PR)+'" y2="'+Y(g)+'" stroke="'+col+'" stroke-width="'+(isT?1.3:1)+'"'+(g!==0?' stroke-dasharray="5 4"':'')+' opacity="'+(isM?.55:1)+'"/>';
+    s+='<text x="'+(PL-5)+'" y="'+(Y(g)+4)+'" text-anchor="end" font-size="11" fill="'+(isT?'var(--up)':'var(--faint)')+'">'+(g>0?'+':'')+g+'</text>';
+  });
+  /* OU mean-reversion cone */
+  if(opts.coneHL){
+    var z0=z[n-1], hl=opts.coneHL, mean='', up='', dn='';
+    for(var t=0;t<=horizon;t++){
+      var dec=Math.pow(0.5,t/hl), m=z0*dec;
+      var uu=m+(1-dec)*1.0, dd=m-(1-dec)*1.0;
+      var px=X(n-1+t).toFixed(1);
+      mean+=(t?' L':'M')+px+','+Y(m).toFixed(1);
+      up+=(t?' L':'M')+px+','+Y(uu).toFixed(1);
+      dn=' L'+px+','+Y(dd).toFixed(1)+dn;
+    }
+    s+='<path d="'+up+dn+' Z" fill="var(--amber)" opacity="0.13"/>';
+    s+='<path d="'+mean+'" fill="none" stroke="var(--amber)" stroke-width="1.6" stroke-dasharray="5 4"/>';
+  }
+  var pts=z.map(function(v,i){ return X(i).toFixed(1)+','+Y(v).toFixed(1); }).join(' ');
+  s+='<polyline points="'+pts+'" fill="none" stroke="var(--primary)" stroke-width="1.7" stroke-linejoin="round"/>';
+  var last=z[n-1];
+  s+='<circle cx="'+X(n-1)+'" cy="'+Y(last)+'" r="4" fill="var(--amber)" stroke="var(--card)" stroke-width="1.5"/>';
+  s+='<text x="'+(X(n-1)-6)+'" y="'+(Y(last)-9)+'" text-anchor="end" font-size="12.5" font-weight="bold" fill="var(--amber)">'+sgn(last,2)+'</text>';
+  [[0,'start'],[Math.floor(n/2),'middle'],[n-1,'end']].forEach(function(p){
+    if(horizon && p[0]===n-1) return; /* cone caption takes that corner */
+    s+='<text x="'+X(p[0]).toFixed(1)+'" y="'+(H-4)+'" text-anchor="'+p[1]+'" font-size="11" fill="var(--faint)">'+dates[p[0]].slice(0,7)+'</text>';
+  });
+  if(horizon) s+='<text x="'+(W-PR)+'" y="'+(H-4)+'" text-anchor="end" font-size="11" fill="var(--amber)">OU 预期回归锥 →</text>';
+  s+='<g class="xh" style="display:none"><line class="xhl" y1="'+PT+'" y2="'+(PT+ih)+'" stroke="var(--faint)" stroke-width="1" stroke-dasharray="3 3"/><circle class="xhc" r="3.5" fill="var(--primary)" stroke="var(--card)" stroke-width="1.5"/></g>';
+  el.innerHTML='<svg viewBox="0 0 '+W+' '+H+'" width="100%" style="display:block;touch-action:pan-y" role="img" aria-label="价差Z序列图">'+s+'</svg>'+(opts.interactive?'<div class="charttip"></div>':'');
+  if(!opts.interactive) return null;
+  var svg=el.querySelector('svg'), tip=el.querySelector('.charttip'), xh=el.querySelector('.xh');
+  var line=el.querySelector('.xhl'), dot=el.querySelector('.xhc');
+  function show(i){
+    if(i==null||i<0||i>=n){ xh.style.display='none'; tip.style.opacity=0; if(opts.onHover)opts.onHover(null); return; }
+    xh.style.display='';
+    line.setAttribute('x1',X(i)); line.setAttribute('x2',X(i));
+    dot.setAttribute('cx',X(i)); dot.setAttribute('cy',Y(z[i]));
+    tip.innerHTML=dates[i]+' · Z '+sgn(z[i],2);
+    tip.style.opacity=1;
+    var r=el.getBoundingClientRect();
+    var px=X(i)/W*r.width;
+    tip.style.left=Math.max(0,Math.min(px+10,r.width-tip.offsetWidth-2))+'px';
+    tip.style.top=Math.max(0,Y(z[i])/H*r.height-34)+'px';
+    if(opts.onHover) opts.onHover(dates[i], i);
+  }
+  function fromEvent(e){
+    var r=svg.getBoundingClientRect();
+    var cx=(e.touches?e.touches[0].clientX:e.clientX);
+    var i=Math.round(((cx-r.left)/r.width*W-PL)/iw*(total-1));
+    show(Math.max(0,Math.min(n-1,i)));
+  }
+  svg.addEventListener('mousemove',fromEvent);
+  svg.addEventListener('touchstart',fromEvent,{passive:true});
+  svg.addEventListener('touchmove',fromEvent,{passive:true});
+  svg.addEventListener('mouseleave',function(){ show(null); });
+  return { showAtDate:function(d){ var i=dates.indexOf(d); if(i>=0)show(i); else show(null); }, clear:function(){ show(null); } };
+}
+
+function sparkSVG(vals, up, w, h){
+  w=w||200; h=h||38;
+  if(!vals||vals.length<2) return '';
+  var min=Math.min.apply(null,vals), max=Math.max.apply(null,vals), rng=(max-min)||1;
+  var pts=vals.map(function(v,i){
+    return (w*i/(vals.length-1)).toFixed(1)+','+(3+(h-6)*(1-(v-min)/rng)).toFixed(1);
+  }).join(' ');
+  var col=up?'var(--up)':'var(--down)';
+  return '<svg class="qspark" viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="none" aria-hidden="true"><polyline points="'+pts+'" fill="none" stroke="'+col+'" stroke-width="1.6"/></svg>';
+}
+function ma(vals, win){
+  var out=[], s=0;
+  for(var i=0;i<vals.length;i++){
+    s+=vals[i]; if(i>=win) s-=vals[i-win];
+    out.push(s/Math.min(i+1,win));
+  }
+  return out;
+}
+
+/* ================= Tier 0: pills / header ================= */
+(function(){
+  $('asof').textContent=DATA.asof;
+  $('gen').textContent=DATA.generated;
+  var items=[
+    {id:'sym',  label:'监控品种', v:DATA.stats.n_symbols},
+    {id:'base', label:'结构相关', v:DATA.stats.n_baseline},
+    {id:'coint',label:'协整配对', v:DATA.stats.n_coint},
+    {id:'alert',label:'解耦告警', v:DATA.stats.n_alerts, cls:'warn'},
+    {id:'fal',  label:'证伪信号', v:2, cls:'purp'}
+  ];
+  $('pills').innerHTML=items.map(function(it){
+    return '<button class="pill '+(it.cls||'')+'" data-pill="'+it.id+'">'+it.label+' <b class="num">'+it.v+'</b></button>';
+  }).join('');
+  $('pills').addEventListener('click',function(e){
+    var b=e.target.closest('[data-pill]'); if(!b) return;
+    var id=b.getAttribute('data-pill');
+    document.querySelectorAll('#pills .pill').forEach(function(p){ p.classList.toggle('on', p===b && id!=='sym'); });
+    if(id==='sym'){ clearFocus(); window.scrollTo({top:0,behavior:'smooth'}); }
+    if(id==='base'){ setTab('base'); scrollWork(); }
+    if(id==='coint'){ setTab('coint'); scrollWork(); }
+    if(id==='alert'){
+      setFocus({syms:ALERT_SYMS.slice(), label:'解耦告警聚焦：'+ALERT.an+' – '+ALERT.bn+'（'+ALERT.pair.replace('-',' / ')+'）'});
+      window.scrollTo({top:0,behavior:'smooth'});
+    }
+    if(id==='fal'){
+      var c=$('fal-card'); c.scrollIntoView({behavior:'smooth',block:'center'});
+      c.classList.remove('flash'); void c.offsetWidth; c.classList.add('flash');
+    }
+  });
+  $('search').addEventListener('input',function(e){
+    state.query=e.target.value.trim().toLowerCase();
+    applyFilters();
+  });
+  $('focus-clear').addEventListener('click',function(){
+    clearFocus();
+    document.querySelectorAll('#pills .pill').forEach(function(p){ p.classList.remove('on'); });
+  });
+})();
+function scrollWork(){
+  document.querySelector('.workbench').scrollIntoView({behavior:'smooth',block:'start'});
+}
+function setFocus(f){
+  state.focus=f;
+  $('focus-text').innerHTML='聚焦：<b>'+esc(f.label)+'</b> —— 仅显示相关品种与配对';
+  $('focusbar').classList.add('show');
+  applyFilters();
+}
+function clearFocus(){
+  state.focus=null;
+  $('focusbar').classList.remove('show');
+  applyFilters();
+}
+
+/* ================= Tier 1: alert card ================= */
+(function(){
+  var p=pairOf(ALERT.pair), c=p.coint, b=p.base;
+  $('al-names').textContent=ALERT.an+' – '+ALERT.bn;
+  $('al-codes').textContent=ALERT.pair.replace('-',' – ');
+  $('al-z').textContent='Z = '+sgn(ALERT.z,2);
+  $('al-kv').innerHTML=
+    '<div class="kv"><span class="k">触发条件</span><span class="v">'+esc(ALERT.triggers[0])+'</span></div>'+
+    '<div class="kv"><span class="k">协整半衰期</span><span class="v num">'+c.half_life.toFixed(1)+' 天</span></div>'+
+    '<div class="kv"><span class="k">对冲系数 β</span><span class="v num">'+c.beta.toFixed(3)+'</span></div>'+
+    '<div class="kv"><span class="k">ADF 检验 p 值</span><span class="v num">'+c.adf_p.toFixed(4)+'</span></div>'+
+    '<div class="kv"><span class="k">长期相关 r</span><span class="v num">'+b.r.toFixed(3)+'</span></div>'+
+    '<div class="kv"><span class="k">符号维持率（回测）</span><span class="v num">'+(b.sign_rate*100).toFixed(1)+'%</span></div>'+
+    '<div class="kv"><span class="k">EWMA 相关偏离</span><span class="v num" style="color:var(--amber)">'+sgn(b.ewma_dev)+'（全场最大）</span></div>';
+  $('al-chart-title').textContent=ALERT.an+'–'+ALERT.bn+' 对数价差 Z 分数 · 近 '+p.pz.z.length+' 个交易日（含 OU 均值回归锥，半衰期 '+c.half_life.toFixed(1)+' 天）';
+  $('al-range').textContent=p.pz.dates[0]+' → '+p.pz.dates[p.pz.dates.length-1];
+  zChart($('al-chart'), p.pz, {coneHL:c.half_life, h:250});
+  $('al-open').addEventListener('click',function(){ openPair(ALERT.pair); });
+})();
+
+/* ================= Tier 2: quotes ================= */
+function visibleQuotes(){
+  var grp=SECTOR_GROUPS.filter(function(g){ return g.label===state.sector; })[0];
+  var list=DATA.quotes.filter(function(q){
+    if(state.sector!=='全部' && !grp.test(q.sector)) return false;
+    if(state.query){
+      var hay=(q.name+' '+q.symbol).toLowerCase();
+      if(hay.indexOf(state.query)<0) return false;
+    }
+    if(state.focus){
+      var fsyms=state.focus.syms, keep=fsyms.indexOf(q.symbol)>=0;
+      if(!keep){
+        pairsOf(q.symbol).forEach(function(p){
+          if(fsyms.indexOf(p.a)>=0 || fsyms.indexOf(p.b)>=0) keep=true;
+        });
+      }
+      if(!keep) return false;
+    }
+    return true;
+  });
+  if(state.sort==='chg') list=list.slice().sort(function(a,b){ return b.chg60-a.chg60; });
+  if(state.sort==='name') list=list.slice().sort(function(a,b){ return a.name.localeCompare(b.name,'zh'); });
+  return list;
+}
+function quoteCardHTML(q){
+  var up=q.chg60>=0;
+  var closes=(DATA.series[q.symbol]||{}).closes;
+  var spUp=closes&&closes.length>1 ? closes[closes.length-1]>=closes[0] : up;
+  var rc=relCounts(q.symbol);
+  var parts=[];
+  if(rc.corr) parts.push(rc.corr+' 相关');
+  if(rc.coint) parts.push(rc.coint+' 协整');
+  if(rc.tail) parts.push(rc.tail+' 尾部');
+  if(rc.alert) parts.push(rc.alert+' 告警');
+  var badge=parts.length
+    ? '<button class="relbadge'+(rc.alert?' hasalert':'')+'" data-relbadge="'+q.symbol+'" title="聚焦该品种的配对">🔗 '+parts.join(' · ')+'</button>'
+    : '<span class="relbadge none">暂无显著配对</span>';
+  return '<div class="qcard" data-sym="'+q.symbol+'" tabindex="0" role="button" aria-label="'+esc(q.name)+' 详情">'+
+    '<div class="row1"><span class="qnm"><span class="qname">'+q.name+'</span> <span class="qcode num">'+q.symbol+'</span></span><span class="qsec">'+q.sector+'</span></div>'+
+    '<div class="qmeta num">'+q.symbol+' · '+q.sector+'</div>'+
+    sparkSVG(closes, spUp)+
+    '<div class="qpr"><span class="qclose num">'+fmt(q.close)+'</span> <span class="qchg num '+(up?'up':'down')+'">'+pct(q.chg60)+'</span></div>'+
+    '<div class="qfoot"><span>近120日 · 60日涨跌</span>'+badge+'</div>'+
+  '</div>';
+}
+function renderQuotes(){
+  var list=visibleQuotes();
+  var grid=$('qgrid');
+  grid.innerHTML=list.length?list.map(quoteCardHTML).join(''):'<div class="qempty">没有匹配的品种——试试清掉搜索或聚焦条件。</div>';
+}
+function renderChips(){
+  $('sector-chips').innerHTML=SECTOR_GROUPS.map(function(g){
+    return '<button class="chip" data-sector="'+g.label+'" aria-pressed="'+(state.sector===g.label)+'">'+g.label+'</button>';
+  }).join('')+
+  '<label class="sortsel">排序 <select id="sortsel">'+
+    '<option value="def"'+(state.sort==='def'?' selected':'')+'>默认</option>'+
+    '<option value="chg"'+(state.sort==='chg'?' selected':'')+'>60日涨跌</option>'+
+    '<option value="name"'+(state.sort==='name'?' selected':'')+'>名称</option>'+
+  '</select></label>';
+  $('sortsel').addEventListener('change',function(e){
+    state.sort=e.target.value;
+    if(document.startViewTransition){ document.startViewTransition(function(){ renderQuotes(); }); }
+    else renderQuotes();
+  });
+}
+$('sector-chips').addEventListener('click',function(e){
+  var b=e.target.closest('[data-sector]'); if(!b) return;
+  state.sector=b.getAttribute('data-sector');
+  renderChips();
+  if(document.startViewTransition){ document.startViewTransition(function(){ renderQuotes(); }); }
+  else renderQuotes();
+});
+$('qgrid').addEventListener('click',function(e){
+  var badge=e.target.closest('[data-relbadge]');
+  if(badge){
+    e.stopPropagation();
+    var sym=badge.getAttribute('data-relbadge'), q=Q[sym];
+    setFocus({syms:[sym], label:q.name+'（'+sym+'）的全部配对', strictQuotes:false});
+    scrollWork();
+    return;
+  }
+  var card=e.target.closest('.qcard');
+  if(card) openSingle(card.getAttribute('data-sym'));
+});
+$('qgrid').addEventListener('keydown',function(e){
+  if(e.key!=='Enter') return;
+  var card=e.target.closest('.qcard');
+  if(card) openSingle(card.getAttribute('data-sym'));
+});
+/* hover cross-highlight (40ms debounce) */
+var hoverTimer=null;
+$('qgrid').addEventListener('mouseover',function(e){
+  var card=e.target.closest('.qcard'); if(!card) return;
+  var sym=card.getAttribute('data-sym');
+  clearTimeout(hoverTimer);
+  hoverTimer=setTimeout(function(){ setRowHighlight(sym); },40);
+});
+$('qgrid').addEventListener('mouseleave',function(){
+  clearTimeout(hoverTimer); setRowHighlight(null);
+});
+function setRowHighlight(sym){
+  ['coint-body','baseline-body'].forEach(function(id){
+    var tb=$(id); if(!tb) return;
+    tb.classList.toggle('dim', !!sym);
+    tb.querySelectorAll('tr').forEach(function(tr){
+      var syms=(tr.getAttribute('data-syms')||'').split(' ');
+      tr.classList.toggle('hl', !!sym && syms.indexOf(sym)>=0);
+    });
+  });
+  var tl=$('tail-list');
+  tl.classList.toggle('dim', !!sym);
+  tl.querySelectorAll('.tailrow').forEach(function(tr){
+    var syms=(tr.getAttribute('data-syms')||'').split(' ');
+    tr.classList.toggle('hl', !!sym && syms.indexOf(sym)>=0);
+  });
+}
+
+/* ================= Tier 2: pair tables ================= */
+function pairNameCell(p, badge){
+  return '<td><span class="pairname">'+p.an+' – '+p.bn+'</span> <span class="paircode num">'+p.key+'</span>'+(badge||'')+'</td>';
+}
+function renderCoint(){
+  var rows=DATA.coints.slice().sort(function(a,b){ return a.half_life-b.half_life; });
+  $('coint-body').innerHTML=rows.map(function(c){
+    var p=pairOf(c.pair), z=curZ(p);
+    var isA=!!p.alert;
+    return '<tr data-pair="'+c.pair+'" data-syms="'+p.a+' '+p.b+'"'+(isA?' class="is-alert"':'')+'>'+
+      pairNameCell(p, isA?'<span class="alertbadge">告警</span>':'')+
+      '<td class="r num">'+c.beta.toFixed(3)+'</td>'+
+      '<td class="r num"><b>'+c.half_life.toFixed(1)+'</b> 天</td>'+
+      '<td class="r num hideS">'+(c.adf_p===0?'&lt;0.0001':c.adf_p.toFixed(4))+'</td>'+
+      '<td class="r num"'+(z!=null&&Math.abs(z)>=2?' style="color:var(--amber);font-weight:700"':'')+'>'+(z!=null?sgn(z,2):'—')+'</td>'+
+    '</tr>';
+  }).join('');
+}
+function renderBaseline(){
+  var rows=DATA.baselines.slice().sort(function(a,b){
+    var aa=pairOf(a.pair).alert?0:1, bb=pairOf(b.pair).alert?0:1;
+    if(aa!==bb) return aa-bb;
+    return Math.abs(b.ewma_dev)-Math.abs(a.ewma_dev);
+  });
+  $('baseline-body').innerHTML=rows.map(function(b){
+    var p=pairOf(b.pair), isA=!!p.alert;
+    var dev=b.ewma_dev, half=Math.min(Math.abs(dev)/0.30,1)*50;
+    var left=dev<0?(50-half):50;
+    var col=isA?'var(--amber)':(Math.abs(dev)>=0.1?'var(--amber)':'var(--primary)');
+    return '<tr data-pair="'+b.pair+'" data-syms="'+p.a+' '+p.b+'"'+(isA?' class="is-alert"':'')+'>'+
+      pairNameCell(p, isA?'<span class="alertbadge">告警 Z='+sgn(p.alert.z,2)+'</span>':'')+
+      '<td class="r num">'+b.r.toFixed(3)+'</td>'+
+      '<td class="r signrate num hideS">'+(b.sign_rate*100).toFixed(1)+'%</td>'+
+      '<td><div class="devwrap"><div class="devbar"><div class="zero"></div><div class="fill" style="left:'+left+'%;width:'+half+'%;background:'+col+'"></div></div><span class="num" style="color:'+col+'">'+sgn(dev)+'</span></div></td>'+
+    '</tr>';
+  }).join('');
+}
+function renderTails(){
+  var max=Math.max.apply(null, DATA.tails.map(function(t){ return t.ratio; }));
+  $('tail-list').innerHTML=DATA.tails.map(function(t){
+    var p=pairOf(t.pair);
+    return '<div class="tailrow" data-pair="'+t.pair+'" data-syms="'+p.a+' '+p.b+'">'+
+      '<div><span class="pairname">'+t.an+' – '+t.bn+'</span><br /><span class="paircode num">'+t.pair+'</span></div>'+
+      '<div class="tailbar"><div class="fill" style="width:'+(t.ratio/max*100)+'%"></div></div>'+
+      '<div class="tailmeta">联合大跌 <b class="num">'+(t.joint*100).toFixed(2)+'%</b><br />独立假设的 <b class="num">'+t.ratio.toFixed(2)+' 倍</b></div>'+
+    '</div>';
+  }).join('');
+}
+function renderNotes(){
+  var labels={step2:'USDA WASDE',step3a:'贵金属供给',step3b:'产区天气',step4a:'金银与央行',step5:'生猪基本面',step6a:'农业农村部',step6b:'国家统计局',step1:'行情与持仓',dl:'模型验证'};
+  var order=['step2','step6b','step3a','step4a','step5','step6a','step3b','step1','dl'];
+  $('notes-list').innerHTML=order.filter(function(k){ return DATA.notes[k]; }).map(function(k){
+    var txt=DATA.notes[k];
+    var tag=txt.indexOf(labels[k])===0?'':'<span class="tag'+(k==='dl'?' purp':'')+'">'+labels[k]+'</span>';
+    return '<li>'+tag+esc(txt)+'</li>';
+  }).join('');
+}
+function setTab(id){
+  state.tab=id;
+  document.querySelectorAll('#tabbar .tabbtn').forEach(function(b){
+    b.setAttribute('aria-selected', b.getAttribute('data-tab')===id?'true':'false');
+  });
+  ['coint','base','tail','notes'].forEach(function(t){
+    $('tab-'+t).hidden = t!==id;
+  });
+}
+(function(){
+  var tabs=[['coint','协整套利',DATA.stats.n_coint],['base','相关基线',DATA.stats.n_baseline],['tail','尾部相依',DATA.tails.length],['notes','纪要',null]];
+  $('tabbar').innerHTML=tabs.map(function(t){
+    return '<button class="tabbtn" role="tab" data-tab="'+t[0]+'" aria-selected="'+(state.tab===t[0])+'">'+t[1]+(t[2]!=null?' <span class="num">'+t[2]+'</span>':'')+'</button>';
+  }).join('');
+  $('tabbar').addEventListener('click',function(e){
+    var b=e.target.closest('[data-tab]'); if(b) setTab(b.getAttribute('data-tab'));
+  });
+  document.querySelector('.tabs-panel').addEventListener('click',function(e){
+    var tr=e.target.closest('[data-pair]');
+    if(tr) openPair(tr.getAttribute('data-pair'));
+  });
+})();
+
+/* ================= filtering (search + focus) across tables ================= */
+function applyFilters(){
+  renderQuotes();
+  var q=state.query, f=state.focus;
+  function rowVisible(syms){
+    if(q){
+      var ok=false;
+      syms.forEach(function(s){
+        var qq=Q[s]; if(qq && (qq.name+' '+s).toLowerCase().indexOf(q)>=0) ok=true;
+      });
+      if(!ok) return false;
+    }
+    if(f){
+      var hit=false;
+      syms.forEach(function(s){ if(f.syms.indexOf(s)>=0) hit=true; });
+      if(!hit){
+        /* keep pairs where either leg pairs with a focused symbol */
+        var keep=false;
+        syms.forEach(function(s){
+          pairsOf(s).forEach(function(p){
+            if(f.syms.indexOf(p.a)>=0||f.syms.indexOf(p.b)>=0) keep=true;
+          });
+        });
+        if(!keep) return false;
+      }
+    }
+    return true;
+  }
+  ['coint-body','baseline-body'].forEach(function(id){
+    $(id).querySelectorAll('tr').forEach(function(tr){
+      var syms=(tr.getAttribute('data-syms')||'').split(' ');
+      tr.classList.toggle('rowhidden', !rowVisible(syms));
+    });
+  });
+  $('tail-list').querySelectorAll('.tailrow').forEach(function(tr){
+    var syms=(tr.getAttribute('data-syms')||'').split(' ');
+    tr.style.display=rowVisible(syms)?'':'none';
+  });
+}
+
+/* ================= Tier 3: drawer ================= */
+var sheetStack=[];
+function openSheet(titleHTML, bodyHTML, push){
+  if(!push) sheetStack=[];
+  $('sheet-title').innerHTML=titleHTML;
+  $('sheet-body').innerHTML=bodyHTML;
+  $('sheet-body').scrollTop=0;
+  $('sheet-back').hidden=sheetStack.length===0;
+  $('scrim').classList.add('show');
+  var sh=$('sheet');
+  sh.classList.add('open'); sh.setAttribute('aria-hidden','false');
+  document.body.style.overflow='hidden';
+}
+function closeSheet(){
+  sheetStack=[];
+  $('scrim').classList.remove('show');
+  var sh=$('sheet');
+  sh.classList.remove('open'); sh.setAttribute('aria-hidden','true');
+  document.body.style.overflow='';
+}
+$('sheet-close').addEventListener('click',closeSheet);
+$('scrim').addEventListener('click',closeSheet);
+document.addEventListener('keydown',function(e){ if(e.key==='Escape') closeSheet(); });
+$('sheet-back').addEventListener('click',function(){
+  var prev=sheetStack.pop();
+  if(prev) prev(false);
+});
+/* mobile swipe-down to close */
+(function(){
+  var startY=null, dy=0, sh=$('sheet');
+  var handle=$('dragbar');
+  function ts(e){ startY=e.touches[0].clientY; dy=0; }
+  function tm(e){
+    if(startY==null) return;
+    dy=Math.max(0,e.touches[0].clientY-startY);
+    sh.style.transform='translateY('+dy+'px)';
+  }
+  function te(){
+    if(startY==null) return;
+    sh.style.transform='';
+    if(dy>110) closeSheet();
+    startY=null;
+  }
+  handle.addEventListener('touchstart',ts,{passive:true});
+  handle.addEventListener('touchmove',tm,{passive:true});
+  handle.addEventListener('touchend',te);
+  document.querySelector('.sheet-head').addEventListener('touchstart',ts,{passive:true});
+  document.querySelector('.sheet-head').addEventListener('touchmove',tm,{passive:true});
+  document.querySelector('.sheet-head').addEventListener('touchend',te);
+})();
+
+/* ---------- single-symbol view ---------- */
+function openSingle(sym, push){
+  var q=Q[sym]; if(!q) return;
+  var ser=DATA.series[sym]||{closes:[],dates:[]};
+  var closes=ser.closes, dates=ser.dates;
+  var hi=Math.max.apply(null,closes), lo=Math.min.apply(null,closes);
+  var pos=hi>lo?((q.close-lo)/(hi-lo)*100):50;
+  var up=q.chg60>=0;
+  var title='<div class="snap-head"><div><span class="snap-name">'+q.name+'</span> <span class="snap-code num">'+sym+'</span></div>'+
+    '<span class="secpill">'+q.sector+'</span></div>';
+  var alertBanner='';
+  pairsOf(sym).forEach(function(p){
+    if(p.alert){
+      alertBanner='<div class="condbanner"><span>⚠ <b>解耦告警中</b>：与 '+ (p.a===sym?p.bn:p.an) +' 的价差 Z = '+sgn(p.alert.z,2)+'，突破 ±2 阈值，半衰期 '+p.alert.hl.toFixed(1)+' 天。</span>'+
+      '<button class="linkbtn" data-gopair="'+p.key+'">查看配对诊断 →</button></div>';
+    }
+  });
+  var relRows=pairsOf(sym).map(function(p){
+    var other=p.a===sym?p.b:p.a, oq=Q[other];
+    var tags='', metric='';
+    if(p.alert){ tags+='<span class="tytag ty-alert">告警</span> '; metric='<b>Z '+sgn(p.alert.z,2)+'</b><br />半衰期 '+p.alert.hl.toFixed(1)+' 天'; }
+    if(p.coint){ tags+='<span class="tytag ty-coint">协整</span> '; if(!metric) metric='<b>β '+p.coint.beta.toFixed(3)+'</b><br />半衰期 '+p.coint.half_life.toFixed(1)+' 天'; }
+    if(p.base){ tags+='<span class="tytag ty-corr">相关</span> '; if(!metric) metric='<b>r '+p.base.r.toFixed(3)+'</b><br />EWMA 偏离 '+sgn(p.base.ewma_dev); }
+    if(p.tail){ tags+='<span class="tytag ty-tail">尾部</span> '; if(!metric) metric='<b>'+p.tail.ratio.toFixed(2)+' 倍</b><br />联合大跌 '+(p.tail.joint*100).toFixed(2)+'%'; }
+    return '<button class="relrow" data-gopair="'+p.key+'"><span><span class="rn">'+(oq?oq.name:other)+'</span> <span class="paircode num">'+other+'</span><br />'+tags+'</span><span class="rm">'+metric+'</span></button>';
+  }).join('');
+  var body=
+    '<div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-top:4px">'+
+      '<span class="snap-price num">'+fmt(q.close)+'</span>'+
+      '<span class="qchg num '+(up?'up':'down')+'">'+pct(q.chg60)+' · 60日</span>'+
+      '<span style="color:var(--muted);font-size:12.5px">主力连续 · '+q.date+' 收盘</span></div>'+
+    '<div style="margin-top:14px"><div class="pctlabels"><span>120日低 <b class="num">'+fmt(lo)+'</b></span><span>当前价位于区间 <b class="num">'+pos.toFixed(0)+'%</b> 分位</span><span>120日高 <b class="num">'+fmt(hi)+'</b></span></div>'+
+    '<div class="pctbar"><div class="dot" style="left:'+pos+'%"></div></div></div>'+
+    alertBanner+
+    '<h4>近 120 日走势（收盘价 · MA20 / MA60）</h4>'+
+    '<div class="chartbox" id="single-chart"></div>'+
+    '<div class="legend"><span><span class="sw" style="background:var(--primary)"></span>收盘价</span><span><span class="sw" style="background:#E8710A"></span>MA20</span><span><span class="sw" style="background:var(--faint)"></span>MA60</span></div>'+
+    '<h4>关联配对（'+pairsOf(sym).length+'）</h4>'+
+    (relRows||'<p style="color:var(--muted);font-size:13.5px">该品种暂未进入任何显著配对（基线 / 协整 / 尾部）。</p>')+
+    '<h4>基本面纪要</h4><ul class="note-list" style="padding:0" id="single-notes"></ul>';
+  if(push) sheetStack.push(function(){ openSingle(sym,false); });
+  openSheet(title, body, push);
+  var m20=ma(closes,20), m60=ma(closes,60);
+  lineChart($('single-chart'), {
+    w:500,h:230, dates:dates,
+    series:[
+      {data:closes,color:'var(--primary)',width:2},
+      {data:m20,color:'#E8710A',width:1.2},
+      {data:m60,color:'var(--faint)',width:1.2,dash:'4 3'}
+    ],
+    fmtY:function(v){ return fmt(v); },
+    fmtTip:function(i){ return dates[i]+' · 收盘 '+fmt(closes[i])+' · MA20 '+fmt(m20[i]); }
+  });
+  $('single-notes').innerHTML=$('notes-list').innerHTML;
+  bindPairLinks();
+}
+function bindPairLinks(){
+  $('sheet-body').querySelectorAll('[data-gopair]').forEach(function(b){
+    b.addEventListener('click',function(){ openPair(b.getAttribute('data-gopair'), true); });
+  });
+  $('sheet-body').querySelectorAll('[data-gosingle]').forEach(function(b){
+    b.addEventListener('click',function(){ openSingle(b.getAttribute('data-gosingle'), true); });
+  });
+}
+
+/* ---------- pair view ---------- */
+function openPair(key, push){
+  var p=pairOf(key); if(!p) return;
+  var qa=Q[p.a], qb=Q[p.b];
+  var z=curZ(p);
+  var pills='';
+  if(p.base) pills+='<span class="statpill">长期相关 r <b class="num">'+p.base.r.toFixed(3)+'</b></span>';
+  if(p.coint) pills+='<span class="statpill">β <b class="num">'+p.coint.beta.toFixed(3)+'</b></span><span class="statpill">半衰期 <b class="num">'+p.coint.half_life.toFixed(1)+' 天</b></span><span class="statpill">ADF p <b class="num">'+(p.coint.adf_p===0?'&lt;0.0001':p.coint.adf_p.toFixed(4))+'</b></span>';
+  if(z!=null) pills+='<span class="statpill'+(Math.abs(z)>=2?' hot':'')+'">当前 Z <b class="num">'+sgn(z,2)+'</b></span>';
+  if(p.alert) pills+='<span class="statpill hot">⚠ 解耦告警</span>';
+  var title='<div class="snap-head"><div><span class="snap-name">'+p.an+' – '+p.bn+'</span><br /><span class="snap-code num">'+key+'</span></div></div>'+
+    '<div class="pillrow">'+pills+'</div>';
+  var diagBase=p.base
+    ? '<div class="dv">长期 r <b class="num">'+p.base.r.toFixed(3)+'</b><br />EWMA 当前 <span class="num">'+p.base.ewma_now.toFixed(3)+'</span> · 偏离 <b class="num" style="color:'+(Math.abs(p.base.ewma_dev)>=0.1?'var(--amber)':'inherit')+'">'+sgn(p.base.ewma_dev)+'</b></div>'
+    : '<div class="none">未入选 30 对结构性基线（长期相关未达基线标准）。</div>';
+  var diagCoint=p.coint
+    ? '<div class="dv">β <b class="num">'+p.coint.beta.toFixed(3)+'</b> · 半衰期 <b class="num">'+p.coint.half_life.toFixed(1)+' 天</b><br />ADF p <span class="num">'+(p.coint.adf_p===0?'&lt;0.0001':p.coint.adf_p.toFixed(4))+'</span>——价差具备均值回归统计依据</div>'
+    : '<div class="none">未通过 ADF 协整检验——高相关 ≠ 可交易，价差不保证回归。</div>';
+  var diagTail=p.tail
+    ? '<div class="dv">联合大跌概率 <b class="num">'+(p.tail.joint*100).toFixed(2)+'%</b><br />为独立假设的 <b class="num">'+p.tail.ratio.toFixed(2)+' 倍</b>——极端行情下抱团风险显著</div>'
+    : '<div class="none">未检出显著尾部相依（未进入 8 对名单）。</div>';
+  var diagWF=p.base
+    ? '<div class="dv">该对符号维持率 <b class="num">'+(p.base.sign_rate*100).toFixed(1)+'%</b><br />全样本 Walk-Forward 93.9%（门槛 ≥85%）· 衰减 12.4%——双 Go 通过</div>'
+    : '<div class="dv">全样本 Walk-Forward 符号维持率 <b class="num">93.9%</b>（门槛 ≥85%），均值衰减 12.4%——双 Go 通过；该对未单独进入基线回测样本。</div>';
+  function legCard(q, sym){
+    var ser=DATA.series[sym]||{closes:[]};
+    var cs=ser.closes, hi=Math.max.apply(null,cs), lo=Math.min.apply(null,cs);
+    var pos=hi>lo?((q.close-lo)/(hi-lo)*100):50;
+    var up=q.chg60>=0;
+    return '<div class="leg"><div class="ln">'+q.name+' <span class="paircode num">'+sym+'</span></div>'+
+      '<div style="font-size:12px;color:var(--muted)">'+q.sector+' · 主力连续</div>'+
+      '<div style="margin-top:6px"><span style="font-size:21px;font-weight:700" class="num">'+fmt(q.close)+'</span> <span class="qchg num '+(up?'up':'down')+'">'+pct(q.chg60)+'</span></div>'+
+      '<div class="pctbar"><div class="dot" style="left:'+pos+'%"></div></div>'+
+      '<div class="pctlabels"><span>120日低 '+fmt(lo)+'</span><span>'+pos.toFixed(0)+'% 分位</span><span>高 '+fmt(hi)+'</span></div>'+
+      '<p style="margin:8px 0 0"><button class="linkbtn" data-gosingle="'+sym+'">看 '+q.name+' 单品种视图 →</button></p></div>';
+  }
+  var body=
+    '<h4 style="margin-top:6px">双腿走势对比（近 120 日 · 定基归一化 =100）</h4>'+
+    '<div class="chartbox" id="pair-top"></div>'+
+    '<div class="legend"><span><span class="sw" style="background:var(--primary)"></span>'+p.an+'</span><span><span class="sw" style="background:#B06000"></span>'+p.bn+'</span><span style="color:var(--faint)">两图十字准星按日期同步</span></div>'+
+    (p.pz
+      ? '<h4>价差 Z 序列（近 '+p.pz.z.length+' 日 · ±1.5 / ±2 参考线'+(p.coint?' · OU 回归锥':'')+'）</h4><div class="chartbox" id="pair-z"></div>'
+      : '<p style="color:var(--muted);font-size:13.5px;margin-top:14px">该配对未通过协整检验，无价差 Z 序列——仅作相关性 / 尾部风险观察。</p>')+
+    '<h4>配对诊断</h4><div class="diag2">'+
+      '<div class="diag"><div class="dt">结构相关 / EWMA 偏离</div>'+diagBase+'</div>'+
+      '<div class="diag"><div class="dt">协整 β 与半衰期</div>'+diagCoint+'</div>'+
+      '<div class="diag"><div class="dt">尾部相依</div>'+diagTail+'</div>'+
+      '<div class="diag"><div class="dt">Walk-Forward 验证</div>'+diagWF+'</div>'+
+    '</div>'+
+    '<h4>双腿基本面镜像</h4><div class="mirror">'+legCard(qa,p.a)+legCard(qb,p.b)+'</div>'+
+    '<h4>基本面纪要</h4><ul class="note-list" style="padding:0" id="pair-notes"></ul>';
+  if(push) sheetStack.push(function(){ openPair(key,false); });
+  openSheet(title, body, push);
+  var sa=DATA.series[p.a], sb=DATA.series[p.b];
+  var na=sa.closes.map(function(v){ return v/sa.closes[0]*100; });
+  var nb=sb.closes.map(function(v){ return v/sb.closes[0]*100; });
+  var zc=null, syncing=false;
+  var top=lineChart($('pair-top'), {
+    w:500,h:200, dates:sa.dates,
+    series:[
+      {data:na,color:'var(--primary)',width:2},
+      {data:nb,color:'#B06000',width:2}
+    ],
+    fmtY:function(v){ return v.toFixed(0); },
+    fmtTip:function(i){ return sa.dates[i]+' · '+p.an+' '+na[i].toFixed(1)+' / '+p.bn+' '+nb[i].toFixed(1); },
+    onHover:function(d){ if(syncing||!zc) return; syncing=true; if(d) zc.showAtDate(d); else zc.clear(); syncing=false; }
+  });
+  if(p.pz){
+    zc=zChart($('pair-z'), p.pz, {h:210, interactive:true, coneHL:p.coint?p.coint.half_life:null,
+      onHover:function(d){ if(syncing) return; syncing=true; if(d) top.showAtDate(d); else top.clear(); syncing=false; }});
+  }
+  $('pair-notes').innerHTML=$('notes-list').innerHTML;
+  bindPairLinks();
+}
+
+/* ================= init ================= */
+renderChips();
+renderQuotes();
+renderCoint();
+renderBaseline();
+renderTails();
+renderNotes();
+setTab('coint');
+</script>
+</body>
+</html>
